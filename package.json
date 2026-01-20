@@ -1,0 +1,12 @@
+{
+  "name": "liga-cs2-bot",
+  "version": "1.0.0",
+  "description": "Bot da liga amadora de CS2",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1"
+  }
+}

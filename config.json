@@ -1,0 +1,7 @@
+{
+  "token": "SEU_TOKEN",
+  "prefix": "!",
+  "categoriaPartidas": "ID_DA_CATEGORIA",
+  "canalPendencias": "ID_CANAL_PENDENCIAS",
+  "canalResultados": "ID_CANAL_RESULTADOS"
+}

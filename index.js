@@ -36,9 +36,7 @@ client.on("interactionCreate", async (interaction) => {
 
       // Verifica se é IGL
       const isIGL = membro.roles.cache.some(role => role.name === "IGL");
-      if (!isIGL) {
-        return interaction.reply({content: "❌ Apenas IGLs podem usar este comando.", ephemeral: true});
-      }
+      if (!isIGL) return interaction.reply({content: "❌ Apenas IGLs podem usar este comando.", ephemeral: true});
 
       // Adiciona na fila
       if (filaIGL.some(i => i.id === membro.id)) {
@@ -70,7 +68,6 @@ client.on("interactionCreate", async (interaction) => {
       if (!esperando) return interaction.reply({content: "❌ Este IGL não está mais na fila.", ephemeral: true});
       if (esperando.id === outroIGL.id) return interaction.reply({content: "❌ Você não pode jogar contra você mesmo.", ephemeral: true});
 
-      // Pergunta o nome do time
       await interaction.reply({content: "Digite o nome do seu time no chat."});
 
       const filter = m => m.author.id === outroIGL.id;
@@ -80,11 +77,26 @@ client.on("interactionCreate", async (interaction) => {
         const nomeTime2 = m.content;
         const nomeTime1 = esperando.username;
 
-        // Cria canal privado
+        // Categoria "Jogos"
         const guild = interaction.guild;
-        const categoria = guild.channels.cache.find(c => c.name === "Jogos" && c.type === 4); // Categoria
+        let categoria = guild.channels.cache.find(c => c.name === "Jogos" && c.type === 4);
+        if (!categoria) {
+          categoria = await guild.channels.create({
+            name: "Jogos",
+            type: 4 // categoria
+          });
+        }
+
+        // Nome único do canal
+        let nomeCanal = `${nomeTime1}-x-${nomeTime2}`;
+        let contador = 1;
+        while (guild.channels.cache.find(c => c.name === nomeCanal)) {
+          nomeCanal = `${nomeTime1}-x-${nomeTime2}-${contador}`;
+          contador++;
+        }
+
         const canal = await guild.channels.create({
-          name: `${nomeTime1}-x-${nomeTime2}`,
+          name: nomeCanal,
           type: 0, // text channel
           parent: categoria.id,
           permissionOverwrites: [

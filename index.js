@@ -1,147 +1,131 @@
-const { 
-  Client, 
-  GatewayIntentBits, 
-  ActionRowBuilder, 
-  ButtonBuilder, 
-  ButtonStyle, 
-  SlashCommandBuilder, 
-  PermissionFlagsBits, 
-  Partials 
-} = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ChannelType,
+  PermissionsBitField
+} = require('discord.js');
+
+const config = require('./config.json');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
-  partials: [Partials.Channel]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
-// Variáveis globais
-let filaIGL = []; // [{id, username}]
-let jogosAtivos = []; // [{canalId, times: [IGL1, IGL2]}]
-
-client.once("ready", async () => {
-  console.log("🤖 Bot da liga CS2 online!");
-
-  // Comando de slash para marcar jogo
-  const comando = new SlashCommandBuilder()
-    .setName("marcar_jogo")
-    .setDescription("IGL marca disponibilidade para jogo");
-
-  await client.application.commands.set([comando]);
+client.once('clientReady', () => {
+  console.log(`Bot online como ${client.user.tag}`);
 });
 
-client.on("interactionCreate", async (interaction) => {
-  if (interaction.isChatInputCommand()) {
-    if (interaction.commandName === "marcar_jogo") {
-      const membro = interaction.member;
+/* ================= PENDÊNCIA ================= */
 
-      // Verifica se é IGL
-      const isIGL = membro.roles.cache.some(role => role.name === "IGL");
-      if (!isIGL) return interaction.reply({content: "❌ Apenas IGLs podem usar este comando.", ephemeral: true});
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  if (!message.content.startsWith(config.prefix)) return;
 
-      // Adiciona na fila
-      if (filaIGL.some(i => i.id === membro.id)) {
-        return interaction.reply({content: "⏳ Você já está aguardando jogo.", ephemeral: true});
-      }
+  const args = message.content.slice(1).split(' ');
+  const cmd = args.shift().toLowerCase();
 
-      filaIGL.push({id: membro.id, username: membro.user.username});
+  // !pendencia
+  if (cmd === 'pendencia') {
+    if (message.channel.id !== config.canalPendencias) return;
 
-      const row = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId(`aceitar_${membro.id}`)
-            .setLabel("Aceitar e colocar meu time")
-            .setStyle(ButtonStyle.Primary)
-        );
+    const botao = new ButtonBuilder()
+      .setCustomId('aceitar_pendencia')
+      .setLabel('Aceitar jogo')
+      .setStyle(ButtonStyle.Success);
 
-      await interaction.reply({content: `✅ ${membro.user.username} está aguardando jogo...`, components: [row]});
-    }
+    const row = new ActionRowBuilder().addComponents(botao);
+
+    await message.channel.send({
+      content: `📌 **IGL ${message.author} aguardando jogo**`,
+      components: [row]
+    });
   }
 
-  // Botões
+  // !resultado
+  if (cmd === 'resultado') {
+    const texto = args.join(' ');
+    if (!texto) return message.reply('Use: !resultado <descrição>');
+
+    const canal = message.guild.channels.cache.get(config.canalResultados);
+    if (!canal) return;
+
+    await canal.send({
+      content: `🏆 **Resultado da partida**\n${texto}`
+    });
+
+    await message.channel.send('✅ Resultado enviado. Sala pode ser fechada.');
+  }
+});
+
+/* ================= BOTÃO ================= */
+
+client.on('interactionCreate', async interaction => {
   if (interaction.isButton()) {
-    const [acao, iglId] = interaction.customId.split("_");
+    if (interaction.customId === 'aceitar_pendencia') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_time')
+        .setTitle('Aceitar Partida');
 
-    if (acao === "aceitar") {
-      const outroIGL = interaction.member;
-      const esperando = filaIGL.find(i => i.id === iglId);
+      const input = new TextInputBuilder()
+        .setCustomId('nome_time')
+        .setLabel('Nome do seu time')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
 
-      if (!esperando) return interaction.reply({content: "❌ Este IGL não está mais na fila.", ephemeral: true});
-      if (esperando.id === outroIGL.id) return interaction.reply({content: "❌ Você não pode jogar contra você mesmo.", ephemeral: true});
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(input)
+      );
 
-      await interaction.reply({content: "Digite o nome do seu time no chat."});
+      await interaction.showModal(modal);
+    }
+  }
 
-      const filter = m => m.author.id === outroIGL.id;
-      const collector = interaction.channel.createMessageCollector({filter, time: 30000, max: 1});
+  /* ================= MODAL ================= */
 
-      collector.on("collect", async m => {
-        const nomeTime2 = m.content;
-        const nomeTime1 = esperando.username;
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'modal_time') {
+      const nomeTime = interaction.fields.getTextInputValue('nome_time');
 
-        // Categoria "Jogos"
-        const guild = interaction.guild;
-        let categoria = guild.channels.cache.find(c => c.name === "Jogos" && c.type === 4);
-        if (!categoria) {
-          categoria = await guild.channels.create({
-            name: "Jogos",
-            type: 4 // categoria
-          });
-        }
+      const guild = interaction.guild;
 
-        // Nome único do canal
-        let nomeCanal = `${nomeTime1}-x-${nomeTime2}`;
-        let contador = 1;
-        while (guild.channels.cache.find(c => c.name === nomeCanal)) {
-          nomeCanal = `${nomeTime1}-x-${nomeTime2}-${contador}`;
-          contador++;
-        }
-
-        const canal = await guild.channels.create({
-          name: nomeCanal,
-          type: 0, // text channel
-          parent: categoria.id,
-          permissionOverwrites: [
-            {id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel]},
-            {id: esperando.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]},
-            {id: outroIGL.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]}
-          ]
-        });
-
-        jogosAtivos.push({canalId: canal.id, times: [esperando.id, outroIGL.id]});
-        filaIGL = filaIGL.filter(i => i.id !== esperando.id);
-
-        canal.send(`🎮 Canal criado para o jogo!\nTimes: ${nomeTime1} x ${nomeTime2}`);
+      const canal = await guild.channels.create({
+        name: `partida-${interaction.user.username}`,
+        type: ChannelType.GuildText,
+        parent: config.categoriaPartidas,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionsBitField.Flags.ViewChannel]
+          },
+          {
+            id: interaction.user.id,
+            allow: [PermissionsBitField.Flags.ViewChannel]
+          }
+        ]
       });
 
-      collector.on("end", collected => {
-        if (collected.size === 0) {
-          interaction.followUp({content: "❌ Tempo esgotado. Nenhum nome de time foi digitado.", ephemeral: true});
-        }
+      await canal.send(
+        `🎮 **Sala criada!**\n` +
+        `Time: **${nomeTime}**\n` +
+        `Use **!resultado** após o jogo.`
+      );
+
+      await interaction.reply({
+        content: '✅ Sala criada com sucesso!',
+        ephemeral: true
       });
     }
   }
 });
 
-// Comando de resultado (apenas admins)
-client.on("messageCreate", async (msg) => {
-  if (!msg.content.startsWith("!resultado")) return;
-
-  if (!msg.member.permissions.has(PermissionFlagsBits.Administrator)) {
-    return msg.reply("❌ Apenas administradores podem encerrar a partida e registrar o resultado!");
-  }
-
-  const conteudo = msg.content.replace("!resultado", "").trim();
-  if (!conteudo) return msg.reply("❌ Você precisa colocar o resultado!");
-
-  // Enviar para canal de resultados
-  const canalResultados = msg.guild.channels.cache.find(c => c.name === "resultados");
-  if (canalResultados) canalResultados.send(`🏆 Resultado: ${conteudo}`);
-
-  // Deleta canal da partida
-  const jogo = jogosAtivos.find(j => j.canalId === msg.channel.id);
-  if (jogo) {
-    jogosAtivos = jogosAtivos.filter(j => j.canalId !== msg.channel.id);
-    msg.channel.delete();
-  }
-});
-
-client.login(process.env.TOKEN);
+client.login(config.token);

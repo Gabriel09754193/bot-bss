@@ -1,7 +1,6 @@
 {
-  "token": "SEU_TOKEN",
-  "prefix": "!",
-  "categoriaPartidas": "ID_DA_CATEGORIA",
-  "canalPendencias": "ID_CANAL_PENDENCIAS",
-  "canalResultados": "ID_CANAL_RESULTADOS"
+ "prefix": "!",
+  "categoriaPartidas": "1463269500920266966",
+  "canalPendencias": "1463301754878820505",
+  "canalResultados": "1463260797604987014"
 }

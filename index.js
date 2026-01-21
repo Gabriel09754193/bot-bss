@@ -1,65 +1,86 @@
 const fs = require('fs');
-const { Client, Collection, GatewayIntentBits, InteractionType } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, InteractionType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
-// Coleção de comandos
 client.commands = new Collection();
 
-// Carrega todos os comandos da pasta ./comandos
+// Carrega comandos
 const commandFiles = fs.readdirSync('./comandos').filter(f => f.endsWith('.js'));
 for (const file of commandFiles) {
   const cmd = require(`./comandos/${file}`);
-  client.commands.set(cmd.name, cmd);
+  client.commands.set(cmd.data.name, cmd);
 }
 
-// Evento mensagens
-client.on('messageCreate', async message => {
-  if (!message.content.startsWith('.') || message.author.bot) return;
-
-  const args = message.content.slice(1).split(/ +/);
-  const command = args.shift().toLowerCase();
-
-  if (!client.commands.has(command)) return;
-
-  try {
-    await client.commands.get(command).execute(message, args, client);
-  } catch (err) {
-    console.error(err);
-    message.reply('❌ Erro ao executar o comando!');
-  }
-});
-
 // Evento ready
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`Bot online: ${client.user.tag}`);
 });
 
-// Tratamento de modal submit (para inscrição)
+// Slash commands
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isModalSubmit()) return;
+  if (interaction.isChatInputCommand()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
 
-  if (interaction.customId === 'inscricaoModal') {
-    const nomeTime = interaction.fields.getTextInputValue('nomeTime');
-    const jogadores = interaction.fields.getTextInputValue('jogadores').split(',').map(j => j.trim());
-    const igl = interaction.user.id;
-
-    const arquivo = './data/times.json';
-    let times = [];
-    if (fs.existsSync(arquivo)) times = JSON.parse(fs.readFileSync(arquivo, 'utf-8'));
-
-    // Verifica se o time já existe
-    if (times.find(t => t.nome.toLowerCase() === nomeTime.toLowerCase())) {
-      await interaction.reply({ content: '❌ Esse time já está cadastrado!', ephemeral: true });
-      return;
+    try {
+      await command.execute(interaction);
+    } catch (err) {
+      console.error(err);
+      await interaction.reply({ content: '❌ Erro ao executar o comando!', ephemeral: true });
     }
+  }
 
-    // Adiciona time
-    times.push({ nome: nomeTime, igl, jogadores });
-    fs.writeFileSync(arquivo, JSON.stringify(times, null, 2));
+  // Modal submit
+  if (interaction.type === InteractionType.ModalSubmit) {
+    if (interaction.customId === 'inscricaoModal') {
+      const nomeTime = interaction.fields.getTextInputValue('nomeTime');
+      const jogadores = interaction.fields.getTextInputValue('jogadores').split(',').map(j => j.trim());
+      const igl = interaction.user.id;
 
-    await interaction.reply({ content: `✅ Time **${nomeTime}** cadastrado com sucesso!`, ephemeral: true });
+      const arquivo = './data/times.json';
+      let times = [];
+      if (fs.existsSync(arquivo)) times = JSON.parse(fs.readFileSync(arquivo, 'utf-8'));
+
+      if (times.find(t => t.nome.toLowerCase() === nomeTime.toLowerCase())) {
+        await interaction.reply({ content: '❌ Esse time já está cadastrado!', ephemeral: true });
+        return;
+      }
+
+      // Mensagem de confirmação com botões
+      const confirmButton = new ButtonBuilder()
+        .setCustomId('confirmarTime')
+        .setLabel('✅ Confirmar')
+        .setStyle(ButtonStyle.Success);
+
+      const cancelButton = new ButtonBuilder()
+        .setCustomId('cancelarTime')
+        .setLabel('❌ Cancelar')
+        .setStyle(ButtonStyle.Danger);
+
+      const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
+
+      await interaction.reply({
+        content: `Você deseja registrar o time **${nomeTime}** com os jogadores: ${jogadores.join(', ')}?`,
+        components: [row],
+        ephemeral: true
+      });
+
+      // Aguardar interação do botão
+      const filter = i => i.user.id === interaction.user.id;
+      const collector = interaction.channel.createMessageComponentCollector({ filter, time: 30000, max: 1 });
+
+      collector.on('collect', async i => {
+        if (i.customId === 'confirmarTime') {
+          times.push({ nome: nomeTime, igl, jogadores });
+          fs.writeFileSync(arquivo, JSON.stringify(times, null, 2));
+          await i.update({ content: `✅ Time **${nomeTime}** cadastrado com sucesso!`, components: [] });
+        } else if (i.customId === 'cancelarTime') {
+          await i.update({ content: '❌ Cadastro cancelado!', components: [] });
+        }
+      });
+    }
   }
 });
 
-// Login via variável de ambiente TOKEN (Railway)
+// Login
 client.login(process.env.TOKEN);

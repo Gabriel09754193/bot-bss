@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 
 const client = new Client({
@@ -9,43 +9,44 @@ const client = new Client({
   ]
 });
 
-// 🔹 coleção de comandos
-client.commands = new Collection();
-const PREFIX = '.';
-
-// 🔹 carregar comandos da pasta /comandos
-const commandFiles = fs
-  .readdirSync('./comandos')
-  .filter(file => file.endsWith('.js'));
+// ===== carregar comandos =====
+client.commands = new Map();
+const commandFiles = fs.readdirSync('./comandos').filter(f => f.endsWith('.js'));
 
 for (const file of commandFiles) {
   const command = require(`./comandos/${file}`);
   client.commands.set(command.name, command);
-  console.log(`✅ Comando carregado: ${command.name}`);
 }
 
-// 🔹 escutar mensagens
-client.on('messageCreate', (message) => {
-  if (message.author.bot) return;
-  if (!message.content.startsWith(PREFIX)) return;
+// ===== carregar eventos =====
+const eventFiles = fs.readdirSync('./events').filter(f => f.endsWith('.js'));
 
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+for (const file of eventFiles) {
+  const event = require(`./events/${file}`);
+  client.on('interactionCreate', event.bind(null, client));
+}
+
+// ===== comandos por mensagem =====
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  if (!message.content.startsWith('.')) return;
+
+  const args = message.content.slice(1).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
 
   const command = client.commands.get(commandName);
   if (!command) return;
 
   try {
-    command.execute(message, args, client);
+    await command.execute(message, args);
   } catch (err) {
     console.error(err);
     message.reply('❌ Erro ao executar o comando.');
   }
 });
 
-// 🔹 quando ligar
-client.once('clientReady', () => {
-  console.log('🤖 Bot online e pronto!');
+client.once('ready', () => {
+  console.log(`✅ Bot ligado como ${client.user.tag}`);
 });
 
 client.login(process.env.TOKEN);

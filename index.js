@@ -19,7 +19,7 @@ const client = new Client({
 // ===== CONFIGURAÇÃO (SÓ MUDAR ISSO) =====
 const PREFIX = '.';
 const CATEGORIA_PARTIDAS = '1463269500920266966';
-const CANAL_RESULTADOS = 1463260797604987014';
+const CANAL_RESULTADOS = '1463260797604987014';
 // =======================================
 
 client.once('clientReady', () => {

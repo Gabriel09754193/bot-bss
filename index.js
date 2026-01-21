@@ -2,17 +2,15 @@ const fs = require('fs');
 const { Client, Collection, GatewayIntentBits } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
-// Coleção de comandos
 client.commands = new Collection();
 
-// Carrega todos os comandos da pasta ./comandos
+// Carrega comandos
 const commandFiles = fs.readdirSync('./comandos').filter(f => f.endsWith('.js'));
 for (const file of commandFiles) {
   const cmd = require(`./comandos/${file}`);
   client.commands.set(cmd.name, cmd);
 }
 
-// Evento de mensagens
 client.on('messageCreate', async message => {
   if (!message.content.startsWith('.') || message.author.bot) return;
 
@@ -29,10 +27,10 @@ client.on('messageCreate', async message => {
   }
 });
 
-// Evento ready
 client.once('ready', () => {
   console.log(`Bot online: ${client.user.tag}`);
 });
 
-// Login usando variável de ambiente do Railway
+// Login via variável de ambiente TOKEN no Railway
 client.login(process.env.TOKEN);
+

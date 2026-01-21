@@ -7,7 +7,7 @@ module.exports = {
 
   async execute(message, args) {
     const canalSolicitacoesID = '1463270016303759504'; // Canal público de solicitações
-    const categoriaPartidasID = '1463270089376927845'; // Categoria para canais privados
+    const categoriaPartidasID = '1463269500920266966'; // Categoria para canais privados
     const canalResultadosID = '1463260797604987014'; // Canal onde resultados serão postados
 
     if (this.partidasPendentes.has(message.author.id)) {

@@ -1,52 +1,39 @@
-const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
+const { Client, Collection, GatewayIntentBits } = require('discord.js');
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
-});
+client.commands = new Collection();
 
-// ===== carregar comandos =====
-client.commands = new Map();
+// Carrega comandos
 const commandFiles = fs.readdirSync('./comandos').filter(f => f.endsWith('.js'));
-
 for (const file of commandFiles) {
-  const command = require(`./comandos/${file}`);
-  client.commands.set(command.name, command);
+  const cmd = require(`./comandos/${file}`);
+  client.commands.set(cmd.name, cmd);
 }
 
-// ===== carregar eventos =====
-const eventFiles = fs.readdirSync('./events').filter(f => f.endsWith('.js'));
-
-for (const file of eventFiles) {
-  const event = require(`./events/${file}`);
-  client.on('interactionCreate', event.bind(null, client));
-}
-
-// ===== comandos por mensagem =====
+// Evento de mensagens
 client.on('messageCreate', async message => {
-  if (message.author.bot) return;
-  if (!message.content.startsWith('.')) return;
+  if (!message.content.startsWith('.') || message.author.bot) return;
+  const args = message.content.slice(1).split(/ +/);
+  const command = args.shift().toLowerCase();
 
-  const args = message.content.slice(1).trim().split(/ +/);
-  const commandName = args.shift().toLowerCase();
-
-  const command = client.commands.get(commandName);
-  if (!command) return;
+  if (!client.commands.has(command)) return;
 
   try {
-    await command.execute(message, args);
+    await client.commands.get(command).execute(message, args, client);
   } catch (err) {
     console.error(err);
-    message.reply('❌ Erro ao executar o comando.');
+    message.reply('❌ Erro ao executar o comando!');
   }
 });
 
-client.once('ready', () => {
-  console.log(`✅ Bot ligado como ${client.user.tag}`);
+// Evento ready
+client.once('ready', async () => {
+  console.log(`Bot online: ${client.user.tag}`);
+  // Atualiza painel automaticamente ao iniciar
+  const painel = require('./comandos/paineladmin');
+  await painel.atualizarPainel(client);
 });
 
-client.login(process.env.TOKEN);
+client.login('SEU_TOKEN_AQUI');
+

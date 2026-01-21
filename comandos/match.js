@@ -1,10 +1,8 @@
 const fs = require('fs');
-const painel = require('./paineladmin');
 
 module.exports = {
   name: 'match',
-
-  async execute(message, args, client) {
+  async execute(message, args) {
     const md = args[0]?.toUpperCase();
     const time1 = args[1];
     const time2 = args[2];
@@ -21,8 +19,6 @@ module.exports = {
 
     await message.reply(`🎮 Match criado: **${time1} vs ${time2}** (${md})`);
     await message.delete().catch(()=>{});
-
-    // Atualiza painel automaticamente
-    await painel.atualizarPainel(client);
   }
 };
+

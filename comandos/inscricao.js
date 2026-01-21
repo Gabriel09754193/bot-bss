@@ -7,6 +7,7 @@ module.exports = {
   async execute(message, args) {
     const canalInscricaoID = '1463260686011338814';
     const canalADMID = '1463542650568179766';
+    const canalSuporte = '#suporte'; // Coloque o nome do canal que quer que apareça na mensagem final
 
     // Checar se é o canal certo
     if (message.channel.id !== canalInscricaoID) {
@@ -36,7 +37,7 @@ module.exports = {
       // Enviar tudo para canal ADM
       const canalADM = await message.guild.channels.fetch(canalADMID);
       await canalADM.send({
-        content: `✅ **Nova inscrição de time**\n\n**Time:** ${nomeTimeMsg.content}\n**IGL:** <@${message.author.id}>\n**Jogadores:**\n${jogadoresMsg.content}`
+        content: `✅ **Equipe ${nomeTimeMsg.content} registrada na Liga BSS**\n\n**IGL:** <@${message.author.id}>\n**Jogadores:**\n${jogadoresMsg.content}\n\nQualquer dúvida entrar em contato com suporte ${canalSuporte}`
       });
 
       // Confirmar para o IGL

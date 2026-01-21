@@ -1,33 +1,39 @@
-const { MessageActionRow, MessageButton, MessageEmbed } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
   nome: 'match',
   descricao: 'Criar uma partida',
-  partidasPendentes: new Map(), // Limite de 1 partida por IGL
+  partidasPendentes: new Map(),
 
   async execute(message, args) {
-    const canalSolicitacoesID = '1463270016303759504'; // Canal público de solicitações
-    const categoriaPartidasID = '1463562210591637605'; // Categoria para canais privados
-    const canalResultadosID = '1463260797604987014'; // Canal onde resultados serão postados
+    // ------------------------------
+    // CONFIGURE AQUI OS IDS CORRETOS
+    // ------------------------------
+    const canalSolicitacoesID = '1463270089376927845'; // Canal público onde os IGLs verão as solicitações
+    const categoriaPartidasID = '1463562210591637605'; // Categoria para canais privados das partidas
+    const canalResultadosID = '1463260797604987014'; // Canal de resultados
 
+    // ------------------------------
+    // VERIFICAR SE O IGL JÁ TEM PARTIDA
+    // ------------------------------
     if (this.partidasPendentes.has(message.author.id)) {
-      return message.reply('❌ Você já possui uma partida pendente. Aguarde até ser aceita ou cancelada.');
+      return message.reply('❌ Você já possui uma partida pendente.');
     }
 
-    // Deletar mensagem inicial
-    try { await message.delete(); } catch {}
-
-    const filter = m => m.author.id === message.author.id;
-
     try {
-      // Pergunta 1: Nome do time
+      // ------------------------------
+      // PERGUNTA 1: Nome do time
+      // ------------------------------
+      const filter = m => m.author.id === message.author.id;
       const msgTime = await message.channel.send('🎯 **Digite o nome do seu time:**');
       const nomeTimeMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
       if (!nomeTimeMsg) return message.channel.send('❌ Tempo esgotado.');
       await nomeTimeMsg.delete();
       await msgTime.delete();
 
-      // Pergunta 2: Formato MD1/MD3
+      // ------------------------------
+      // PERGUNTA 2: Formato MD1 / MD3
+      // ------------------------------
       const msgFormato = await message.channel.send('⚔️ **Escolha o formato da partida:** `MD1` ou `MD3`');
       const formatoMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
       if (!formatoMsg) return message.channel.send('❌ Tempo esgotado.');
@@ -35,7 +41,9 @@ module.exports = {
       await formatoMsg.delete();
       await msgFormato.delete();
 
-      // Criar partida pendente
+      // ------------------------------
+      // CRIAR PARTIDA PENDENTE
+      // ------------------------------
       const partida = {
         id: Date.now(),
         criador: message.author.id,
@@ -45,100 +53,90 @@ module.exports = {
       };
       this.partidasPendentes.set(message.author.id, partida);
 
-      // Mensagem no canal de solicitações
+      // ------------------------------
+      // MENSAGEM NO CANAL DE SOLICITAÇÕES
+      // ------------------------------
       const canalSolicitacoes = await message.guild.channels.fetch(canalSolicitacoesID);
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder()
         .setTitle('🎮 Partida Solicitada')
-        .addField('Time', partida.nomeTime, true)
-        .addField('IGL', `<@${message.author.id}>`, true)
-        .addField('Formato', partida.formato, true)
-        .setDescription(`Aguardando aceitação de outro time.\nVocê pode cancelar esta partida a qualquer momento.`)
-        .setColor('BLURPLE');
+        .setColor('Blurple')
+        .addFields(
+          { name: 'Time', value: partida.nomeTime, inline: true },
+          { name: 'IGL', value: `<@${message.author.id}>`, inline: true },
+          { name: 'Formato', value: partida.formato, inline: true }
+        )
+        .setDescription('⏳ Aguardando outro IGL aceitar a partida!')
+        .setFooter({ text: '⚠️ Apenas admins podem cancelar ou registrar o resultado.' });
 
-      const row = new MessageActionRow()
+      const row = new ActionRowBuilder()
         .addComponents(
-          new MessageButton()
-            .setCustomId(`aceitar_${partida.id}`)
-            .setLabel('✅ Aceitar partida')
-            .setStyle('SUCCESS'),
-          new MessageButton()
-            .setCustomId(`cancelar_${partida.id}`)
-            .setLabel('❌ Cancelar partida')
-            .setStyle('DANGER')
+          new ButtonBuilder()
+            .setCustomId('aceitarPartida')
+            .setLabel('✅ Aceitar')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('cancelarPartida')
+            .setLabel('❌ Cancelar (Admins)')
+            .setStyle(ButtonStyle.Danger),
+          new ButtonBuilder()
+            .setCustomId('resultadoPartida')
+            .setLabel('🏆 Resultado (Admins)')
+            .setStyle(ButtonStyle.Primary)
         );
 
-      const solicitacaoMsg = await canalSolicitacoes.send({ embeds: [embed], components: [row] });
+      const msgSolicitacao = await canalSolicitacoes.send({ embeds: [embed], components: [row] });
 
-      await message.channel.send(`✅ Sua solicitação foi enviada para <#${canalSolicitacoesID}>!`);
+      await message.channel.send(`✅ Solicitação enviada para ${canalSolicitacoes}`);
 
-      // Collector para botões
-      const collector = solicitacaoMsg.createMessageComponentCollector({ time: 3600000 }); // 1 hora
+      // ------------------------------
+      // AGUARDAR INTERAÇÕES DE BOTÃO
+      // ------------------------------
+      const collector = msgSolicitacao.createMessageComponentCollector({ time: 86400000 }); // 24h
+
       collector.on('collect', async i => {
-        // Aceitar partida
-        if (i.customId === `aceitar_${partida.id}`) {
-          if (i.user.id === message.author.id) {
-            return i.reply({ content: '❌ Você não pode aceitar sua própria partida.', ephemeral: true });
+        // Cancelar partida - apenas admins
+        if (i.customId === 'cancelarPartida') {
+          if (!i.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return i.reply({ content: '❌ Apenas admins podem cancelar esta partida.', ephemeral: true });
           }
+          await i.update({ content: `❌ Partida de **${partida.nomeTime}** cancelada pelo admin.`, embeds: [], components: [] });
+          this.partidasPendentes.delete(partida.criador);
+        }
 
-          // Criar canal privado da partida
+        // Registrar resultado - apenas admins
+        if (i.customId === 'resultadoPartida') {
+          if (!i.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return i.reply({ content: '❌ Apenas admins podem registrar o resultado.', ephemeral: true });
+          }
+          const canalResultados = await message.guild.channels.fetch(canalResultadosID);
+          await canalResultados.send(`🏆 Resultado da partida de **${partida.nomeTime}** registrado pelo admin <@${i.user.id}>!`);
+          await i.update({ content: '✅ Resultado registrado!', embeds: [], components: [] });
+          this.partidasPendentes.delete(partida.criador);
+        }
+
+        // Aceitar partida
+        if (i.customId === 'aceitarPartida') {
+          if (i.user.id === partida.criador) return i.reply({ content: '❌ Você não pode aceitar sua própria partida.', ephemeral: true });
+
+          // Criar canal privado para os dois times
           const categoria = await message.guild.channels.fetch(categoriaPartidasID);
-          const canalPartida = await message.guild.channels.create(`partida-${partida.id}`, {
-            type: 'GUILD_TEXT',
+          const canalPrivado = await message.guild.channels.create({
+            name: `match-${partida.nomeTime}`,
+            type: ChannelType.GuildText,
             parent: categoria.id,
             permissionOverwrites: [
-              { id: message.guild.id, deny: ['VIEW_CHANNEL'] },
-              { id: message.author.id, allow: ['VIEW_CHANNEL', 'SEND_MESSAGES'] },
-              { id: i.user.id, allow: ['VIEW_CHANNEL', 'SEND_MESSAGES'] }
+              { id: message.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+              { id: partida.criador, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+              { id: i.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
             ]
           });
 
-          // Mensagem inicial no canal privado
-          const embedPrivado = new MessageEmbed()
-            .setTitle(`🎮 Partida ${partida.formato}`)
-            .addField('Time A', `${partida.nomeTime} (<@${message.author.id}>)`, true)
-            .addField('Time B', `${i.user.username}`, true)
-            .addField('Status', '✅ Aguardando início', false)
-            .setColor('GREEN')
-            .setDescription(`⚠️ Observações:
-- Apenas **admins** podem cancelar a partida.
-- Registrar resultado envia mensagem automática para <#${canalResultadosID}>.`);
-
-          const rowPrivado = new MessageActionRow()
-            .addComponents(
-              new MessageButton()
-                .setCustomId(`admin_cancelar_${partida.id}`)
-                .setLabel('🛑 Cancelar partida')
-                .setStyle('DANGER')
-                .setDisabled(false), // Para admins, você checa permissões depois
-              new MessageButton()
-                .setCustomId(`admin_resultado_${partida.id}`)
-                .setLabel('📝 Registrar resultado')
-                .setStyle('PRIMARY')
-                .setDisabled(false) // Para admins
-            );
-
-          await canalPartida.send({ embeds: [embedPrivado], components: [rowPrivado] });
-
-          // Atualizar status e remover da lista pendente
-          partida.status = 'aceita';
-          this.partidasPendentes.delete(message.author.id);
-          await solicitacaoMsg.delete();
-          await i.reply({ content: `✅ Partida aceita! Canal privado criado: ${canalPartida}`, ephemeral: true });
-        }
-
-        // Cancelar partida
-        if (i.customId === `cancelar_${partida.id}`) {
-          if (i.user.id !== message.author.id && !i.member.permissions.has('ADMINISTRATOR')) {
-            return i.reply({ content: '❌ Apenas o criador ou admins podem cancelar a partida.', ephemeral: true });
-          }
-
-          this.partidasPendentes.delete(message.author.id);
-          await solicitacaoMsg.delete();
-          await i.reply({ content: '❌ Partida cancelada.', ephemeral: true });
+          await i.update({ content: `✅ Partida aceita! Canal privado criado: ${canalPrivado}`, components: [], embeds: [] });
         }
       });
+
     } catch (err) {
-      console.error(err);
+      console.error('Erro ao criar partida:', err);
       message.channel.send('❌ Ocorreu um erro ao criar a partida.');
     }
   }

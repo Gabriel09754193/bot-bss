@@ -1,40 +1,28 @@
-require('dotenv').config();
-const fs = require('fs');
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isModalSubmit()) return;
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    if (interaction.customId.startsWith('modalResultado_')) {
+        const vencedor = interaction.fields.getTextInputValue('vencedor');
+        const placar = interaction.fields.getTextInputValue('placar');
+        const mapas = interaction.fields.getTextInputValue('mapas');
+
+        const embedResultado = new EmbedBuilder()
+            .setTitle('🏆 Resultado da Partida')
+            .setColor('Gold')
+            .addFields(
+                { name: 'Vencedor', value: vencedor },
+                { name: 'Placar', value: placar },
+                { name: 'Mapas', value: mapas }
+            )
+            .setFooter({ text: `Registrado pelo admin ${interaction.user.tag}` })
+            .setTimestamp();
+
+        const canalResultados = await interaction.guild.channels.fetch('ID_CANAL_RESULTADOS');
+        await canalResultados.send({ embeds: [embedResultado] });
+
+        await interaction.reply({ content: '✅ Resultado registrado com sucesso!', ephemeral: true });
+
+        // Remover partida pendente
+        // this.partidasPendentes.delete(???)  <- se estiver acessível
+    }
 });
-
-// Carregar comandos
-client.comandos = new Collection();
-const comandoFiles = fs.readdirSync('./comandos').filter(f => f.endsWith('.js'));
-for (const file of comandoFiles) {
-  const comando = require(`./comandos/${file}`);
-  client.comandos.set(comando.nome, comando);
-}
-
-// Evento de mensagem
-client.on('messageCreate', async message => {
-  if (!message.content.startsWith('.') || message.author.bot) return;
-
-  const args = message.content.slice(1).split(/ +/);
-  const comandoNome = args.shift().toLowerCase();
-
-  const comando = client.comandos.get(comandoNome);
-  if (!comando) return;
-
-  try {
-    await comando.execute(message, args);
-  } catch (err) {
-    console.error(err);
-    message.reply('❌ Erro ao executar o comando!');
-  }
-});
-
-// Bot online
-client.once('ready', () => {
-  console.log(`✅ Bot online: ${client.user.tag}`);
-});
-
-client.login(process.env.TOKEN);

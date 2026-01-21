@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { EmbedBuilder } = require('discord.js');
 
-const CANAL_PRIVADO = 'SEU_CANAL_PRIVADO_ID';
+const CANAL_PRIVADO = 'SEU_CANAL_PRIVADO_ID'; // coloque o ID do canal privado
 const TIMES_JSON = './data/times.json';
 const MATCHES_JSON = './data/matches.json';
 

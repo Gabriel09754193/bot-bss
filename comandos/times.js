@@ -20,7 +20,6 @@ module.exports = {
       .setTitle('📋 Times Inscritos')
       .setColor('#00ff99');
 
-    // Para cada time, adiciona no embed
     times.forEach((time, i) => {
       embed.addFields({
         name: `${i + 1}. ${time.nome} (IGL: <@${time.igl}>)`,
@@ -29,8 +28,6 @@ module.exports = {
     });
 
     await message.reply({ embeds: [embed] });
-
-    // apaga a mensagem do comando
     await message.delete().catch(() => {});
   }
 };

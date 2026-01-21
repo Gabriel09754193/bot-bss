@@ -8,10 +8,10 @@ module.exports = {
     if (!message.member.permissions.has('Administrator')) return message.reply('❌ Apenas admins podem usar este comando!');
 
     const nomeTime = args.join(' ');
-    if (!nomeTime) return message.reply('❌ Informe o nome do time: .removetime NomeDoTime');
+    if (!nomeTime) return message.reply('❌ Use: .removetime NomeDoTime');
 
     const arquivo = './data/times.json';
-    if (!fs.existsSync(arquivo)) return message.reply('❌ Nenhum time cadastrado ainda.');
+    if (!fs.existsSync(arquivo)) return message.reply('❌ Nenhum time cadastrado.');
 
     let times = JSON.parse(fs.readFileSync(arquivo, 'utf-8'));
     const index = times.findIndex(t => t.nome.toLowerCase() === nomeTime.toLowerCase());
@@ -21,7 +21,7 @@ module.exports = {
     fs.writeFileSync(arquivo, JSON.stringify(times,null,2));
 
     await message.reply(`✅ Time **${nomeTime}** removido.`);
-    await message.delete().catch(() => {});
+    await message.delete().catch(()=>{});
 
     // Atualiza painel automaticamente
     await painel.atualizarPainel(client);

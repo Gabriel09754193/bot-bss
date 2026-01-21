@@ -19,5 +19,8 @@ module.exports = {
       content: '🎮 Clique no botão para abrir um match',
       components: [row]
     });
+
+    // apaga a mensagem ".match"
+    await message.delete().catch(() => {});
   }
 };

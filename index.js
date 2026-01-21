@@ -30,12 +30,8 @@ client.on('messageCreate', async message => {
 });
 
 // Evento ready
-client.once('ready', async () => {
+client.once('ready', () => {
   console.log(`Bot online: ${client.user.tag}`);
-
-  // Atualiza painel automático ao iniciar
-  const painel = require('./comandos/paineladmin');
-  await painel.atualizarPainel(client);
 });
 
 // Login usando variável de ambiente do Railway

@@ -42,12 +42,12 @@ module.exports = async (client, interaction) => {
     const time = interaction.fields.getTextInputValue('time');
     const formato = interaction.fields.getTextInputValue('formato');
 
-    const botao = new ButtonBuilder()
-      .setCustomId('aceitar_match')
+    const aceitar = new ButtonBuilder()
+      .setCustomId(`aceitar_match_${interaction.user.id}`)
       .setLabel('🎮 Aceitar partida')
       .setStyle(ButtonStyle.Success);
 
-    const row = new ActionRowBuilder().addComponents(botao);
+    const row = new ActionRowBuilder().addComponents(aceitar);
 
     await interaction.reply({
       content:
@@ -62,7 +62,17 @@ Outro IGL pode aceitar abaixo 👇`,
   }
 
   // ===== ACEITAR MATCH =====
-  if (interaction.isButton() && interaction.customId === 'aceitar_match') {
+  if (interaction.isButton() && interaction.customId.startsWith('aceitar_match_')) {
+    const iglCriador = interaction.customId.split('_')[2];
+
+    // ❌ impedir aceitar o próprio match
+    if (interaction.user.id === iglCriador) {
+      return interaction.reply({
+        content: '❌ Você não pode aceitar o seu próprio match.',
+        ephemeral: true
+      });
+    }
+
     const guild = interaction.guild;
 
     const canal = await guild.channels.create({
@@ -74,22 +84,84 @@ Outro IGL pode aceitar abaixo 👇`,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
         {
+          id: iglCriador,
+          allow: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
           id: interaction.user.id,
           allow: [PermissionsBitField.Flags.ViewChannel]
         }
       ]
     });
 
-    await canal.send(
-`🎮 **PARTIDA CRIADA**
-IGL que aceitou: <@${interaction.user.id}>
+    // botões dentro do chat
+    const fechar = new ButtonBuilder()
+      .setCustomId('fechar_match')
+      .setLabel('🔒 Fechar chat')
+      .setStyle(ButtonStyle.Danger);
 
-Use este chat para marcar o jogo.`
-    );
+    const resultado = new ButtonBuilder()
+      .setCustomId('resultado_match')
+      .setLabel('📊 Resultado do jogo')
+      .setStyle(ButtonStyle.Primary);
+
+    const row = new ActionRowBuilder().addComponents(resultado, fechar);
+
+    await canal.send({
+      content:
+`🎮 **PARTIDA CRIADA**
+IGLs:
+- <@${iglCriador}>
+- <@${interaction.user.id}>
+
+Usem este chat para marcar o jogo.`,
+      components: [row]
+    });
 
     await interaction.reply({
-      content: `✅ Chat criado: ${canal}`,
+      content: `✅ Chat da partida criado: ${canal}`,
       ephemeral: true
     });
+  }
+
+  // ===== BOTÃO RESULTADO =====
+  if (interaction.isButton() && interaction.customId === 'resultado_match') {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_resultado')
+      .setTitle('Resultado da Partida');
+
+    const resultado = new TextInputBuilder()
+      .setCustomId('resultado')
+      .setLabel('Ex: Vitória da Team X por 2x0')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(resultado)
+    );
+
+    return interaction.showModal(modal);
+  }
+
+  // ===== MODAL RESULTADO =====
+  if (interaction.isModalSubmit() && interaction.customId === 'modal_resultado') {
+    const resultado = interaction.fields.getTextInputValue('resultado');
+
+    await interaction.reply({
+      content: `📊 **RESULTADO REGISTRADO**\n${resultado}`
+    });
+  }
+
+  // ===== FECHAR MATCH (ADM) =====
+  if (interaction.isButton() && interaction.customId === 'fechar_match') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.reply({
+        content: '❌ Apenas administradores podem fechar o chat.',
+        ephemeral: true
+      });
+    }
+
+    await interaction.channel.send('🔒 **Chat encerrado por um administrador.**');
+    setTimeout(() => interaction.channel.delete(), 3000);
   }
 };

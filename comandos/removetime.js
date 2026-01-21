@@ -1,10 +1,8 @@
 const fs = require('fs');
-const painel = require('./paineladmin');
 
 module.exports = {
   name: 'removetime',
-
-  async execute(message, args, client) {
+  async execute(message, args) {
     if (!message.member.permissions.has('Administrator')) return message.reply('❌ Apenas admins podem usar este comando!');
 
     const nomeTime = args.join(' ');
@@ -22,8 +20,5 @@ module.exports = {
 
     await message.reply(`✅ Time **${nomeTime}** removido.`);
     await message.delete().catch(()=>{});
-
-    // Atualiza painel automaticamente
-    await painel.atualizarPainel(client);
   }
 };

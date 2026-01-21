@@ -1,36 +1,50 @@
-const fs = require('fs');
-const path = require('path');
+const { PermissionsBitField } = require('discord.js');
 
 module.exports = {
   nome: 'inscricao',
-  descricao: 'Cadastrar seu time',
+  descricao: 'Cadastrar seu time (apenas no canal de inscrição)',
+
   async execute(message, args) {
-    const filter = m => m.author.id === message.author.id;
-    const channel = message.channel;
+    const canalInscricaoID = '1463260686011338814';
+    const canalADMID = '1463542650568179766';
 
-    await channel.send('Digite o nome do seu time:');
-
-    const nomeTime = (await channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
-    if (!nomeTime) return channel.send('❌ Tempo esgotado.');
-
-    await channel.send('Digite os jogadores e suas funções (uma linha por jogador):');
-    const jogadoresMsg = (await channel.awaitMessages({ filter, max: 1, time: 120000 })).first();
-    if (!jogadoresMsg) return channel.send('❌ Tempo esgotado.');
-
-    const filePath = path.join(__dirname, '../data/times.json');
-    let times = [];
-    if (fs.existsSync(filePath)) {
-      times = JSON.parse(fs.readFileSync(filePath));
+    // Checar se é o canal certo
+    if (message.channel.id !== canalInscricaoID) {
+      return message.reply(`❌ Use este comando apenas no canal de inscrição.`);
     }
 
-    times.push({
-      id: message.author.id,
-      nome: nomeTime.content,
-      jogadores: jogadoresMsg.content.split('\n')
-    });
+    const channel = message.channel;
+    const filter = m => m.author.id === message.author.id;
 
-    fs.writeFileSync(filePath, JSON.stringify(times, null, 2));
+    try {
+      // Pergunta 1: Nome do time
+      const perguntaNome = await channel.send('Digite o nome do seu time:');
+      const nomeTimeMsg = (await channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
+      if (!nomeTimeMsg) return channel.send('❌ Tempo esgotado.');
 
-    channel.send(`✅ Time **${nomeTime.content}** registrado com sucesso!`);
+      await nomeTimeMsg.delete();
+      await perguntaNome.delete();
+
+      // Pergunta 2: Jogadores e funções
+      const perguntaJogadores = await channel.send('Digite os jogadores e suas funções (uma linha por jogador):');
+      const jogadoresMsg = (await channel.awaitMessages({ filter, max: 1, time: 120000 })).first();
+      if (!jogadoresMsg) return channel.send('❌ Tempo esgotado.');
+
+      await jogadoresMsg.delete();
+      await perguntaJogadores.delete();
+
+      // Enviar tudo para canal ADM
+      const canalADM = await message.guild.channels.fetch(canalADMID);
+      await canalADM.send({
+        content: `✅ **Nova inscrição de time**\n\n**Time:** ${nomeTimeMsg.content}\n**IGL:** <@${message.author.id}>\n**Jogadores:**\n${jogadoresMsg.content}`
+      });
+
+      // Confirmar para o IGL
+      await message.reply({ content: `✅ Sua inscrição foi enviada com sucesso!`, ephemeral: true });
+
+    } catch (err) {
+      console.error(err);
+      message.reply('❌ Ocorreu um erro ao processar a inscrição.');
+    }
   }
 };

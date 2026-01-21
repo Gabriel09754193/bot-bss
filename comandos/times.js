@@ -1,49 +1,125 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
 
 module.exports = {
   nome: 'times',
-  descricao: 'Lista todas as equipes cadastradas',
+  descricao: 'Mostrar tabela de times cadastrados na liga',
+  
   timesPendentes: new Map(),
 
-  async execute(message, args) {
+  async execute(message, args, client) {
     try {
-      const LIMITE_EQUIPES = 12;
-      const times = Array.from(this.timesPendentes.values());
+      const MAX_TIMES = 12;
+      const canal = message.channel;
 
+      // --------------------------
+      // Criar embed com times
+      // --------------------------
       const embed = new EmbedBuilder()
-        .setTitle('🏆 Painel de Times - Liga BSS')
-        .setColor('Blurple')
-        .setDescription('Confira abaixo as equipes cadastradas na liga:\n\n🟢 Slot preenchido  |  ⚪ Slot vazio');
+        .setTitle('📋 Tabela de Times - Liga BSS')
+        .setColor('Purple')
+        .setFooter({ text: '🎯 Boa sorte a todos os times!' });
 
-      for (let i = 0; i < LIMITE_EQUIPES; i++) {
-        const time = times[i];
+      const row = new ActionRowBuilder();
+
+      let idx = 1;
+      const slots = [];
+
+      for (let i = 0; i < MAX_TIMES; i++) {
+        const time = Array.from(this.timesPendentes.values())[i];
+
         if (time) {
-          // Jogadores com perfis Steam clicáveis
-          const jogadoresFormatados = time.jogadores.map((j, idx) => {
-            if (j === '.') return `Jogador ${idx + 1}: ❌`;
-            const steam = time.perfisSteam[idx] !== '.' ? `[Steam](${time.perfisSteam[idx]})` : '';
-            return `**${j}** ${steam}`;
-          }).join('\n');
+          const jogadoresFormatados = time.jogadores
+            .filter(j => j.nick !== '.')
+            .map((j, index) => `👤 **Player ${index + 1}:** ${j.nick} | Função: ${j.funcao} | [Steam](${j.steam})`)
+            .join('\n');
 
-          embed.addFields({
-            name: `🟢 Slot ${i + 1}: ${time.nomeTime}`,
-            value: `**IGL:** <@${time.criador}>\n${jogadoresFormatados}`,
-            inline: false
-          });
+          slots.push(
+            `────────────\n🏆 **Slot ${idx} - ${time.nomeTime}**\nIGL: <@${time.criador}>\n${jogadoresFormatados}\n────────────`
+          );
+
+          // Botão de remover para admins
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`removerTime_${time.criador}`)
+              .setLabel(`❌ Remover Slot ${idx}`)
+              .setStyle(ButtonStyle.Danger)
+          );
+
         } else {
-          embed.addFields({
-            name: `⚪ Slot ${i + 1}: Vazio`,
-            value: 'Nenhuma equipe cadastrada ainda.',
-            inline: false
-          });
+          slots.push(`────────────\n⚠️ **Slot ${idx} - Vazio**\nNenhuma equipe cadastrada.\n────────────`);
         }
+
+        idx++;
       }
 
-      await message.channel.send({ embeds: [embed] });
+      embed.setDescription(slots.join('\n'));
+
+      const msg = await canal.send({ embeds: [embed], components: [row] });
+
+      // --------------------------
+      // Collector para remover times
+      // --------------------------
+      const collector = msg.createMessageComponentCollector({ time: 3600000 }); // 1h
+
+      collector.on('collect', async i => {
+        if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+          return i.reply({ content: '❌ Apenas admins podem remover times.', ephemeral: true });
+        }
+
+        const criadorId = i.customId.split('_')[1];
+        const timeRemovido = this.timesPendentes.get(criadorId);
+
+        if (!timeRemovido) {
+          return i.reply({ content: '❌ Time não encontrado ou já removido.', ephemeral: true });
+        }
+
+        // Remove o time
+        this.timesPendentes.delete(criadorId);
+
+        // Atualiza embed
+        let idxAtual = 1;
+        const slotsAtualizados = [];
+        const rowAtualizada = new ActionRowBuilder();
+
+        for (let t of Array.from(this.timesPendentes.values())) {
+          const jogadoresFormatados = t.jogadores
+            .filter(j => j.nick !== '.')
+            .map((j, index) => `👤 **Player ${index + 1}:** ${j.nick} | Função: ${j.funcao} | [Steam](${j.steam})`)
+            .join('\n');
+
+          slotsAtualizados.push(
+            `────────────\n🏆 **Slot ${idxAtual} - ${t.nomeTime}**\nIGL: <@${t.criador}>\n${jogadoresFormatados}\n────────────`
+          );
+
+          // Adiciona novamente botão de remover
+          rowAtualizada.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`removerTime_${t.criador}`)
+              .setLabel(`❌ Remover Slot ${idxAtual}`)
+              .setStyle(ButtonStyle.Danger)
+          );
+
+          idxAtual++;
+        }
+
+        // Preencher slots vazios
+        for (; idxAtual <= MAX_TIMES; idxAtual++) {
+          slotsAtualizados.push(`────────────\n⚠️ **Slot ${idxAtual} - Vazio**\nNenhuma equipe cadastrada.\n────────────`);
+        }
+
+        const embedAtualizado = new EmbedBuilder()
+          .setTitle('📋 Tabela de Times - Liga BSS')
+          .setColor('Purple')
+          .setDescription(slotsAtualizados.join('\n'))
+          .setFooter({ text: '🎯 Boa sorte a todos os times!' });
+
+        await i.update({ embeds: [embedAtualizado], components: [rowAtualizada] });
+        await i.followUp({ content: `✅ Time **${timeRemovido.nomeTime}** removido pelo admin <@${i.user.id}>`, ephemeral: true });
+      });
 
     } catch (err) {
-      console.error('Erro ao listar times:', err);
-      message.channel.send('❌ Ocorreu um erro ao listar as equipes.');
+      console.error('Erro ao exibir tabela de times:', err);
+      message.channel.send('❌ Ocorreu um erro ao exibir a tabela de times.');
     }
   }
 };

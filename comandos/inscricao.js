@@ -2,7 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
   nome: 'inscricao',
-  descricao: 'Cadastrar um time na liga',
+  descricao: 'Cadastrar um time na liga BSS',
 
   async execute(message, args, client) {
     try {
@@ -11,15 +11,22 @@ module.exports = {
 
       const filter = m => m.author.id === message.author.id;
       const MAX_JOGADORES = 8;
-      const SUPORTE_CANAL_ID = '1463261657798283351'; // Substitua pelo canal de suporte
-      const CANAL_INSCRICAO_ID = '1463260686011338814'; // Substitua pelo canal de inscrição
 
-      // Somente no canal correto
+      // --------------------------
+      // CONFIGURE AQUI OS IDS
+      // --------------------------
+      const CANAL_INSCRICAO_ID = '1463260686011338814'; // Canal de inscrição público
+      const CANAL_ADMINS_ID = '1463542650568179766';       // Canal privado de admins
+      const CANAL_SUPORTE_ID = '1463261657798283351';     // Canal de suporte público
+
+      // Apenas no canal de inscrição
       if (message.channel.id !== CANAL_INSCRICAO_ID) {
-        return message.reply(`❌ Este comando só pode ser usado no canal de inscrição.`);
+        return message.reply('❌ Este comando só pode ser usado no canal de inscrição.');
       }
 
-      // --- Pergunta 1: Nome do time ---
+      // --------------------------
+      // Nome do time
+      // --------------------------
       const msgTime = await message.channel.send('🎯 **Digite o nome do seu time:**');
       const nomeTimeMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
       if (!nomeTimeMsg) return message.channel.send('❌ Tempo esgotado.');
@@ -27,55 +34,92 @@ module.exports = {
       await nomeTimeMsg.delete();
       await msgTime.delete();
 
-      // --- Pergunta 2: Jogadores ---
       const jogadores = [];
+
+      // --------------------------
+      // Cadastro dos jogadores
+      // --------------------------
       for (let i = 1; i <= MAX_JOGADORES; i++) {
-        const msgJogador = await message.channel.send(`👤 **Digite o nick do jogador ${i}** (ou '.' se não houver):`);
-        const resposta = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
-        if (!resposta) return message.channel.send('❌ Tempo esgotado.');
-        jogadores.push(resposta.content);
-        await resposta.delete();
-        await msgJogador.delete();
-
-        // Aviso após 5 jogadores
-        if (i === 5) {
-          await message.channel.send('⚠️ Caso sua equipe não tenha 6º, 7º ou 8º jogador, apenas digite `.` nas próximas perguntas. Obrigado! - Administração BSS');
+        if (i === 6) {
+          await message.channel.send(
+            '⚠️ Caso não tenha 6º, 7º ou 8º jogador, digite `.` nas próximas perguntas. Obrigado! - Administração BSS'
+          );
         }
-      }
 
-      // --- Pergunta 3: Perfis Steam ---
-      const perfisSteam = [];
-      for (let i = 0; i < MAX_JOGADORES; i++) {
-        if (jogadores[i] === '.') {
-          perfisSteam.push('.');
-          continue;
-        }
-        const msgSteam = await message.channel.send(`💻 **Digite o perfil Steam do jogador ${i + 1}:**`);
-        const steamResposta = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
-        if (!steamResposta) return message.channel.send('❌ Tempo esgotado.');
-        perfisSteam.push(steamResposta.content);
-        await steamResposta.delete();
+        const msgNick = await message.channel.send(`👤 **Player ${i} - Digite o nick:**`);
+        const nickMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
+        if (!nickMsg) return message.channel.send('❌ Tempo esgotado.');
+        const nick = nickMsg.content;
+        await nickMsg.delete();
+        await msgNick.delete();
+
+        const msgFuncao = await message.channel.send(`🎮 **Player ${i} - Digite a função:**`);
+        const funcaoMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
+        if (!funcaoMsg) return message.channel.send('❌ Tempo esgotado.');
+        const funcao = funcaoMsg.content;
+        await funcaoMsg.delete();
+        await msgFuncao.delete();
+
+        const msgSteam = await message.channel.send(`💻 **Player ${i} - Digite o perfil Steam:**`);
+        const steamMsg = (await message.channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
+        if (!steamMsg) return message.channel.send('❌ Tempo esgotado.');
+        const steam = steamMsg.content;
+        await steamMsg.delete();
         await msgSteam.delete();
+
+        jogadores.push({ nick, funcao, steam });
       }
 
-      // --- Salvar no Map do .times ---
+      // --------------------------
+      // Salvar no comando times
+      // --------------------------
       timesCommand.timesPendentes.set(message.author.id, {
         criador: message.author.id,
         nomeTime,
-        jogadores,
-        perfisSteam
+        jogadores
       });
 
-      // --- Mensagem final pública ---
-      const canalSuporte = await message.guild.channels.fetch(SUPORTE_CANAL_ID);
+      // --------------------------
+      // Mensagem para admins
+      // --------------------------
+      const canalAdmins = await message.guild.channels.fetch(CANAL_ADMINS_ID);
+      const embedAdmins = new EmbedBuilder()
+        .setTitle(`📋 Nova Inscrição de Equipe`)
+        .setColor('Blue')
+        .addFields(
+          { name: 'Time', value: nomeTime, inline: true },
+          { name: 'IGL', value: `<@${message.author.id}>`, inline: true },
+          { 
+            name: 'Jogadores', 
+            value: jogadores
+              .filter(j => j.nick !== '.')
+              .map(j => `**${j.nick}** | Função: ${j.funcao} | [Steam](${j.steam})`)
+              .join('\n') || 'Nenhum jogador cadastrado'
+          }
+        )
+        .setFooter({ text: 'Administração BSS' });
+
+      await canalAdmins.send({ embeds: [embedAdmins] });
+
+      // --------------------------
+      // Mensagem final no chat público
+      // --------------------------
+      const canalSuporte = await message.guild.channels.fetch(CANAL_SUPORTE_ID);
       const embedPublico = new EmbedBuilder()
         .setTitle('✅ Equipe Registrada!')
         .setColor('Green')
         .setDescription(`🎉 Equipe **${nomeTime}** registrada na **Liga BSS**!\n\n📌 Para dúvidas, entre em contato com ${canalSuporte}`)
         .addFields(
           { name: 'IGL', value: `<@${message.author.id}>`, inline: true },
-          { name: 'Jogadores', value: jogadores.filter(j => j !== '.').map(j => `**${j}**`).join(', ') || 'Nenhum', inline: false }
-        );
+          {
+            name: 'Jogadores',
+            value: jogadores
+              .filter(j => j.nick !== '.')
+              .map(j => `**${j.nick}** | Função: ${j.funcao} | [Steam](${j.steam})`)
+              .join('\n') || 'Nenhum jogador cadastrado'
+          }
+        )
+        .setFooter({ text: '🎯 Boa sorte na Liga BSS!' });
 
       await message.channel.send({ embeds: [embedPublico] });
 

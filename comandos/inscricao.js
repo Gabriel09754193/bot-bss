@@ -28,4 +28,15 @@ module.exports = {
 
     // Adicionar campos em action rows
     const firstRow = new ActionRowBuilder().addComponents(nomeTimeInput);
-    const secondRow = new ActionRowBuilder().addComponents(jogadoresInput)
+    const secondRow = new ActionRowBuilder().addComponents(jogadoresInput);
+    modal.addComponents(firstRow, secondRow);
+
+    // Mostrar modal
+    await message.showModal(modal);
+
+    // Esperar resposta do modal
+    const filter = i => i.customId === 'inscricaoModal' && i.user.id === message.author.id;
+
+    const collector = message.channel.createMessageComponentCollector({ filter, time: 60000, max: 1 });
+
+    collector.on('collect

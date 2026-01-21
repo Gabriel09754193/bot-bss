@@ -29,7 +29,7 @@ client.on('messageCreate', async message => {
   }
 });
 
-// Quando o bot estiver online
+// Evento ready
 client.once('ready', async () => {
   console.log(`Bot online: ${client.user.tag}`);
 

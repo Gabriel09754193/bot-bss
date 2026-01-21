@@ -5,6 +5,7 @@ module.exports = {
   async execute(message, args) {
     const canalInscricaoID = '1463260686011338814'; // Canal público
     const canalADMID = '1463542650568179766'; // Canal privado de admins
+    const nomeOrg = 'Liga BSS'; // Nome da organização
     const canalSuporteID = '1463261657798283351'; // Canal de suporte
 
     if (message.channel.id !== canalInscricaoID) {
@@ -13,6 +14,13 @@ module.exports = {
 
     const channel = message.channel;
     const filter = m => m.author.id === message.author.id;
+
+    // Deletar a mensagem inicial do comando para não poluir
+    try {
+      await message.delete();
+    } catch (err) {
+      console.warn('Não foi possível deletar a mensagem do comando.');
+    }
 
     try {
       // Pergunta 1: Nome do time
@@ -26,7 +34,6 @@ module.exports = {
       const jogadores = [];
 
       for (let i = 1; i <= 8; i++) {
-        // Aviso depois do 5º jogador
         if (i === 6) {
           await channel.send('⚠️ Caso sua equipe não tenha 6º, 7º ou 8º player, apenas digite `.` nas próximas perguntas. Obrigado! – Administração BSS');
         }
@@ -34,7 +41,7 @@ module.exports = {
         // Perguntar nick
         const perguntaNick = await channel.send(`🕹 **Digite o nick do jogador ${i}:**`);
         const nickMsg = (await channel.awaitMessages({ filter, max: 1, time: 60000 })).first();
-        if (!nickMsg) break; // Se o tempo esgotar, interrompe
+        if (!nickMsg) break;
         await nickMsg.delete();
         await perguntaNick.delete();
 
@@ -59,9 +66,9 @@ module.exports = {
         });
       }
 
-      // Mensagem pública no canal de inscrição
+      // Mensagem pública no canal de inscrição (limpa e bonita)
       await channel.send({
-        content: `🎉 **Equipe ${nomeTimeMsg.content} registrada na Liga BSS!** 🎉\n\n💡 Qualquer dúvida, entre em contato com o suporte <#${canalSuporteID}>`
+        content: `🎉 **O IGL <@${message.author.id}> fez a inscrição da Equipe **${nomeTimeMsg.content}** na organização ${nomeOrg}!** 🎉\n\n💡 A organização agradece toda a equipe por se inscrever e acreditar no nosso trabalho 😉\nQualquer dúvida, entre em contato com suporte <#${canalSuporteID}>`
       });
 
       // Mensagem privada no canal ADM

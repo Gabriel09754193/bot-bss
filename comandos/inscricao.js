@@ -19,5 +19,8 @@ module.exports = {
       content: '📋 Clique no botão para inscrever seu time',
       components: [row]
     });
+
+    // apaga a mensagem ".inscricao"
+    await message.delete().catch(() => {});
   }
 };

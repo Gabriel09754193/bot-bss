@@ -3,7 +3,6 @@ const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
   name: 'times',
-
   async execute(message) {
     const arquivo = './data/times.json';
     let times = [];

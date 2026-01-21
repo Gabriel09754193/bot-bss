@@ -1,9 +1,13 @@
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const fs = require('fs');
+const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = {
-  name: 'inscricao',
+  data: new SlashCommandBuilder()
+    .setName('inscricao')
+    .setDescription('Cadastro de time para a liga'),
 
-  async execute(message, args) {
+  async execute(interaction) {
+    // Criar modal
     const modal = new ModalBuilder()
       .setCustomId('inscricaoModal')
       .setTitle('Cadastro de Time');
@@ -27,6 +31,7 @@ module.exports = {
 
     modal.addComponents(firstRow, secondRow);
 
-    await message.showModal(modal);
+    // Mostrar modal
+    await interaction.showModal(modal);
   }
 };

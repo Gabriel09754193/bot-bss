@@ -1,25 +1,31 @@
 const fs = require('fs');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, InteractionType } = require('discord.js');
 
 module.exports = {
   name: 'inscricao',
-  async execute(message, args) {
-    const nomeTime = args[0];
-    const igl = message.author.id;
-    const jogadores = args.slice(1);
 
-    if (!nomeTime) return message.reply('❌ Use: .inscricao NomeDoTime Jogador1 Jogador2 ...');
+  async execute(message, args, client) {
+    // Criar modal
+    const modal = new ModalBuilder()
+      .setCustomId('inscricaoModal')
+      .setTitle('Cadastro de Time');
 
-    const arquivo = './data/times.json';
-    let times = [];
-    if (fs.existsSync(arquivo)) times = JSON.parse(fs.readFileSync(arquivo, 'utf-8'));
+    // Campo do nome do time
+    const nomeTimeInput = new TextInputBuilder()
+      .setCustomId('nomeTime')
+      .setLabel('Nome do Time')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Digite o nome do seu time')
+      .setRequired(true);
 
-    if (times.find(t => t.nome.toLowerCase() === nomeTime.toLowerCase()))
-      return message.reply('❌ Esse time já está cadastrado!');
+    // Campo dos jogadores
+    const jogadoresInput = new TextInputBuilder()
+      .setCustomId('jogadores')
+      .setLabel('Jogadores (separe por vírgula)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Ex: Jogador1, Jogador2, Jogador3')
+      .setRequired(true);
 
-    times.push({ nome: nomeTime, igl, jogadores });
-    fs.writeFileSync(arquivo, JSON.stringify(times, null, 2));
-
-    await message.reply(`✅ Time **${nomeTime}** cadastrado com sucesso!`);
-    await message.delete().catch(()=>{});
-  }
-};
+    // Adicionar campos em action rows
+    const firstRow = new ActionRowBuilder().addComponents(nomeTimeInput);
+    const secondRow = new ActionRowBuilder().addComponents(jogadoresInput)

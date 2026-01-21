@@ -3,9 +3,9 @@ module.exports = {
   descricao: 'Cadastrar seu time (apenas no canal de inscrição)',
 
   async execute(message, args) {
-    const canalInscricaoID = 'COLOQUE_AQUI_O_ID_DO_CANAL_DE_INSCRICAO'; // Canal público
-    const canalADMID = 'COLOQUE_AQUI_O_ID_DO_CANAL_DE_ADM'; // Canal privado de admins
-    const canalSuporteID = 'COLOQUE_AQUI_O_ID_DO_CANAL_DE_SUPORTE'; // Canal de suporte
+    const canalInscricaoID = '1463260686011338814'; // Canal público
+    const canalADMID = '1463542650568179766'; // Canal privado de admins
+    const canalSuporteID = '1463261657798283351'; // Canal de suporte
 
     if (message.channel.id !== canalInscricaoID) {
       return message.reply('❌ Use este comando apenas no canal de inscrição.');

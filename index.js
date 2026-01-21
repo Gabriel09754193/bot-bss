@@ -1,17 +1,14 @@
+require('dotenv').config();
+
 const {
   Client,
   GatewayIntentBits,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
   ChannelType,
   PermissionsBitField
 } = require('discord.js');
-
-const config = require('./config.json');
 
 const client = new Client({
   intents: [
@@ -21,111 +18,93 @@ const client = new Client({
   ]
 });
 
-client.once('clientReady', () => {
-  console.log(`Bot online como ${client.user.tag}`);
-});
+// ====== CONFIG SIMPLES ======
+const PREFIX = '.';
+const CATEGORIA_PARTIDAS = '1463269500920266966';
+const CANAL_RESULTADOS = '1463260797604987014';
+// ============================
 
-/* ================= PENDÊNCIA ================= */
+client.once('clientReady', () => {
+  console.log('Bot ligado!');
+});
 
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
-  if (!message.content.startsWith(config.prefix)) return;
+  if (!message.content.startsWith(PREFIX)) return;
 
-  const args = message.content.slice(1).split(' ');
-  const cmd = args.shift().toLowerCase();
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+  const comando = args.shift().toLowerCase();
 
-  // !pendencia
-  if (cmd === 'pendencia') {
-    if (message.channel.id !== config.canalPendencias) return;
-
+  // ===== COMANDO .pendencia =====
+  if (comando === 'pendencia') {
     const botao = new ButtonBuilder()
-      .setCustomId('aceitar_pendencia')
+      .setCustomId(`aceitar_${message.author.id}`)
       .setLabel('Aceitar jogo')
       .setStyle(ButtonStyle.Success);
 
     const row = new ActionRowBuilder().addComponents(botao);
 
     await message.channel.send({
-      content: `📌 **IGL ${message.author} aguardando jogo**`,
+      content: `📌 **IGL ${message.author.username} aguardando jogo**`,
       components: [row]
     });
   }
 
-  // !resultado
-  if (cmd === 'resultado') {
+  // ===== COMANDO .resultado =====
+  if (comando === 'resultado') {
     const texto = args.join(' ');
-    if (!texto) return message.reply('Use: !resultado <descrição>');
+    if (!texto) {
+      return message.reply('Use: `.resultado descrição do jogo`');
+    }
 
-    const canal = message.guild.channels.cache.get(config.canalResultados);
+    const canal = message.guild.channels.cache.get(CANAL_RESULTADOS);
     if (!canal) return;
 
-    await canal.send({
-      content: `🏆 **Resultado da partida**\n${texto}`
-    });
-
-    await message.channel.send('✅ Resultado enviado. Sala pode ser fechada.');
+    await canal.send(`🏆 **Resultado da partida:**\n${texto}`);
+    await message.reply('✅ Resultado enviado!');
   }
 });
 
-/* ================= BOTÃO ================= */
-
+// ===== BOTÃO =====
 client.on('interactionCreate', async interaction => {
-  if (interaction.isButton()) {
-    if (interaction.customId === 'aceitar_pendencia') {
-      const modal = new ModalBuilder()
-        .setCustomId('modal_time')
-        .setTitle('Aceitar Partida');
+  if (!interaction.isButton()) return;
 
-      const input = new TextInputBuilder()
-        .setCustomId('nome_time')
-        .setLabel('Nome do seu time')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
+  const iglId = interaction.customId.split('_')[1];
 
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(input)
-      );
+  const guild = interaction.guild;
 
-      await interaction.showModal(modal);
-    }
-  }
+  const canal = await guild.channels.create({
+    name: `partida-${interaction.user.username}`,
+    type: ChannelType.GuildText,
+    parent: CATEGORIA_PARTIDAS,
+    permissionOverwrites: [
+      {
+        id: guild.id,
+        deny: [PermissionsBitField.Flags.ViewChannel]
+      },
+      {
+        id: iglId,
+        allow: [PermissionsBitField.Flags.ViewChannel]
+      },
+      {
+        id: interaction.user.id,
+        allow: [PermissionsBitField.Flags.ViewChannel]
+      }
+    ]
+  });
 
-  /* ================= MODAL ================= */
+  await canal.send(
+    `🎮 **Sala criada!**\n` +
+    `IGLs: <@${iglId}> x <@${interaction.user.id}>\n\n` +
+    `Após o jogo use:\n` +
+    `\`.resultado Vitória do time X por 2x0\``
+  );
 
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId === 'modal_time') {
-      const nomeTime = interaction.fields.getTextInputValue('nome_time');
-
-      const guild = interaction.guild;
-
-      const canal = await guild.channels.create({
-        name: `partida-${interaction.user.username}`,
-        type: ChannelType.GuildText,
-        parent: config.categoriaPartidas,
-        permissionOverwrites: [
-          {
-            id: guild.id,
-            deny: [PermissionsBitField.Flags.ViewChannel]
-          },
-          {
-            id: interaction.user.id,
-            allow: [PermissionsBitField.Flags.ViewChannel]
-          }
-        ]
-      });
-
-      await canal.send(
-        `🎮 **Sala criada!**\n` +
-        `Time: **${nomeTime}**\n` +
-        `Use **!resultado** após o jogo.`
-      );
-
-      await interaction.reply({
-        content: '✅ Sala criada com sucesso!',
-        ephemeral: true
-      });
-    }
-  }
+  await interaction.reply({
+    content: '✅ Sala criada com sucesso!',
+    ephemeral: true
+  });
 });
 
-client.login(config.token);
+client.login(process.env.DISCORD_TOKEN);
+

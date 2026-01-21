@@ -2,73 +2,94 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   ChannelType,
   PermissionsBitField
 } = require('discord.js');
 
 module.exports = async (client, interaction) => {
 
-  // ===== MODAL =====
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId === 'modal_match') {
-      const time = interaction.fields.getTextInputValue('time');
-      const formato = interaction.fields.getTextInputValue('formato');
+  // ===== ABRIR MODAL =====
+  if (interaction.isButton() && interaction.customId === 'abrir_modal_match') {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_match')
+      .setTitle('Abrir Match');
 
-      const botao = new ButtonBuilder()
-        .setCustomId('aceitar_match')
-        .setLabel('🎮 Aceitar partida')
-        .setStyle(ButtonStyle.Success);
+    const time = new TextInputBuilder()
+      .setCustomId('time')
+      .setLabel('Nome do seu time')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
 
-      const row = new ActionRowBuilder().addComponents(botao);
+    const formato = new TextInputBuilder()
+      .setCustomId('formato')
+      .setLabel('Formato (MD1 ou MD3)')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
 
-      await interaction.reply({
-        content:
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(time),
+      new ActionRowBuilder().addComponents(formato)
+    );
+
+    return interaction.showModal(modal);
+  }
+
+  // ===== MODAL SUBMIT =====
+  if (interaction.isModalSubmit() && interaction.customId === 'modal_match') {
+    const time = interaction.fields.getTextInputValue('time');
+    const formato = interaction.fields.getTextInputValue('formato');
+
+    const botao = new ButtonBuilder()
+      .setCustomId('aceitar_match')
+      .setLabel('🎮 Aceitar partida')
+      .setStyle(ButtonStyle.Success);
+
+    const row = new ActionRowBuilder().addComponents(botao);
+
+    await interaction.reply({
+      content:
 `📢 **MATCH ABERTO**
 👤 IGL: <@${interaction.user.id}>
 🏷️ Time: **${time}**
 🎯 Formato: **${formato}**
 
-Clique no botão abaixo para aceitar.`,
-        components: [row]
-      });
-    }
+Outro IGL pode aceitar abaixo 👇`,
+      components: [row]
+    });
   }
 
-  // ===== BOTÃO =====
-  if (interaction.isButton()) {
-    if (interaction.customId === 'aceitar_match') {
-      const guild = interaction.guild;
+  // ===== ACEITAR MATCH =====
+  if (interaction.isButton() && interaction.customId === 'aceitar_match') {
+    const guild = interaction.guild;
 
-      const canal = await guild.channels.create({
-        name: `match-${interaction.user.username}`,
-        type: ChannelType.GuildText,
-        permissionOverwrites: [
-          {
-            id: guild.id,
-            deny: [PermissionsBitField.Flags.ViewChannel]
-          },
-          {
-            id: interaction.user.id,
-            allow: [PermissionsBitField.Flags.ViewChannel]
-          }
-        ]
-      });
+    const canal = await guild.channels.create({
+      name: `match-${interaction.user.username}`,
+      type: ChannelType.GuildText,
+      permissionOverwrites: [
+        {
+          id: guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: interaction.user.id,
+          allow: [PermissionsBitField.Flags.ViewChannel]
+        }
+      ]
+    });
 
-      await canal.send(
+    await canal.send(
 `🎮 **PARTIDA CRIADA**
-IGLs conectados:
-- <@${interaction.user.id}>
+IGL que aceitou: <@${interaction.user.id}>
 
-Usem este chat para marcar o jogo.
-Após finalizar, use:
-\`.resultado TimeVencedor TimePerdedor\`
-`
-      );
+Use este chat para marcar o jogo.`
+    );
 
-      await interaction.reply({
-        content: `✅ Chat da partida criado: ${canal}`,
-        ephemeral: true
-      });
-    }
+    await interaction.reply({
+      content: `✅ Chat criado: ${canal}`,
+      ephemeral: true
+    });
   }
 };

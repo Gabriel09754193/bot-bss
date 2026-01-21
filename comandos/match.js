@@ -1,37 +1,23 @@
 const {
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle
+  ButtonStyle
 } = require('discord.js');
 
 module.exports = {
   name: 'match',
 
   async execute(message) {
-    const modal = new ModalBuilder()
-      .setCustomId('modal_match')
-      .setTitle('Abrir Match');
+    const botao = new ButtonBuilder()
+      .setCustomId('abrir_modal_match')
+      .setLabel('➕ Criar Match')
+      .setStyle(ButtonStyle.Primary);
 
-    const time = new TextInputBuilder()
-      .setCustomId('time')
-      .setLabel('Nome do seu time')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
+    const row = new ActionRowBuilder().addComponents(botao);
 
-    const formato = new TextInputBuilder()
-      .setCustomId('formato')
-      .setLabel('Formato (MD1 ou MD3)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(time),
-      new ActionRowBuilder().addComponents(formato)
-    );
-
-    await message.showModal(modal);
+    await message.reply({
+      content: '🎮 Clique no botão para abrir um match',
+      components: [row]
+    });
   }
 };

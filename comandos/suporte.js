@@ -14,7 +14,7 @@ module.exports = {
   async execute(message, args, client) {
     // ================= CONFIG =================
     const CANAL_SUPORTE_ID = '1463261657798283351';
-    const CARGO_ADMIN_ID = '1463257906546868463';
+    const CARGO_ADMIN_ID = '1463257679115063370';
     const CATEGORIA_TICKETS_ID = '1463677292365611153';
     // ==========================================
 

@@ -1,45 +1,9 @@
-const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  ChannelType,
-  PermissionsBitField
-} = require('discord.js');
+const fs = require('fs');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 
 module.exports = async (client, interaction) => {
 
-  // ================= MATCH =================
-
-  if (interaction.isButton() && interaction.customId === 'abrir_modal_match') {
-    const modal = new ModalBuilder()
-      .setCustomId('modal_match')
-      .setTitle('Abrir Match');
-
-    const time = new TextInputBuilder()
-      .setCustomId('time')
-      .setLabel('Nome do seu time')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    const formato = new TextInputBuilder()
-      .setCustomId('formato')
-      .setLabel('Formato (MD1 ou MD3)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(time),
-      new ActionRowBuilder().addComponents(formato)
-    );
-
-    return interaction.showModal(modal);
-  }
-
-  // ================= INSCRIÇÃO =================
-
+  // ================= MODAL DE INSCRIÇÃO =================
   if (interaction.isButton() && interaction.customId === 'abrir_modal_inscricao') {
     const modal = new ModalBuilder()
       .setCustomId('modal_inscricao')
@@ -65,20 +29,51 @@ module.exports = async (client, interaction) => {
     return interaction.showModal(modal);
   }
 
-  // ===== MODAL INSCRIÇÃO =====
+  // ================= SALVAR INSCRIÇÃO =================
   if (interaction.isModalSubmit() && interaction.customId === 'modal_inscricao') {
     const nomeTime = interaction.fields.getTextInputValue('nome_time');
     const jogadores = interaction.fields.getTextInputValue('jogadores');
+
+    const arquivo = './data/times.json';
+    let times = [];
+
+    if (fs.existsSync(arquivo)) {
+      times = JSON.parse(fs.readFileSync(arquivo, 'utf-8'));
+    }
+
+    // Verifica duplicidade
+    if (times.some(t => t.igl === interaction.user.id)) {
+      return interaction.reply({
+        content: '❌ Você já possui um time registrado!',
+        ephemeral: true
+      });
+    }
+
+    if (times.some(t => t.nome.toLowerCase() === nomeTime.toLowerCase())) {
+      return interaction.reply({
+        content: '❌ Esse nome de time já está registrado!',
+        ephemeral: true
+      });
+    }
+
+    // Adiciona o time
+    times.push({
+      nome: nomeTime,
+      igl: interaction.user.id,
+      jogadores: jogadores.split('\n'),
+      inscritoEm: new Date().toISOString()
+    });
+
+    fs.writeFileSync(arquivo, JSON.stringify(times, null, 2));
 
     await interaction.reply({
       content:
 `✅ **TIME INSCRITO COM SUCESSO**
 
-🏷️ **Time:** ${nomeTime}
-👤 **IGL:** <@${interaction.user.id}>
-🎮 **Jogadores:**
+🏷️ Time: ${nomeTime}
+👤 IGL: <@${interaction.user.id}>
+🎮 Jogadores:
 ${jogadores}`
     });
   }
-
 };

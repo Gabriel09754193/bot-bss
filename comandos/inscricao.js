@@ -4,8 +4,6 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-// ⚠️ IMPORTANTE: isso será compartilhado com o comando .times
-// Se você já tem um arquivo timesData.js, adapte depois
 const timesData = global.timesData || [];
 global.timesData = timesData;
 
@@ -15,33 +13,29 @@ module.exports = {
   async execute(message) {
     try {
       // ================= CONFIGURAÇÕES =================
-      const CANAL_INSCRICAO_ID = "1463260686011338814"; // canal onde pode usar .inscricao
-      const CARGO_IGL_ID = "1463258074310508765"; // cargo IGL
-      const CATEGORIA_INSC_ID = "1463748578932687001"; // categoria dos canais privados
-      const CANAL_ADMIN_ID = "1463542650568179766"; // canal admin
-      const CANAL_PUBLICO_ID = "1463260686011338814"; // canal público
+      const CANAL_INSCRICAO_ID = "1463260686011338814";
+      const CARGO_IGL_ID = "1463258074310508765";
+      const CATEGORIA_INSC_ID = "1463748578932687001";
+      const CANAL_ADMIN_ID = "1463542650568179766";
+      const CANAL_PUBLICO_ID = "1463260686011338814";
       const LIMITE_TIMES = 16;
       // =================================================
 
-      // 🔒 Canal correto
       if (message.channel.id !== CANAL_INSCRICAO_ID) {
         return message.reply("❌ Este comando só pode ser usado no canal de inscrições.");
       }
 
-      // 🔒 Apenas IGL
       if (!message.member.roles.cache.has(CARGO_IGL_ID)) {
         return message.reply("❌ Apenas **IGLs** podem realizar a inscrição.");
       }
 
-      // 🔒 Limite de times
       if (timesData.length >= LIMITE_TIMES) {
         return message.reply("❌ O limite de equipes já foi atingido.");
       }
 
-      // 🧹 Apaga o comando
       await message.delete();
 
-      // 📂 Cria canal privado
+      // 📂 Criar canal privado
       const canalPrivado = await message.guild.channels.create({
         name: `inscricao-${message.author.username}`,
         type: ChannelType.GuildText,
@@ -59,7 +53,9 @@ module.exports = {
             ]
           },
           {
-            id: message.guild.roles.cache.find(r => r.permissions.has(PermissionFlagsBits.Administrator)).id,
+            id: message.guild.roles.cache.find(r =>
+              r.permissions.has(PermissionFlagsBits.Administrator)
+            ).id,
             allow: [PermissionFlagsBits.ViewChannel]
           }
         ]
@@ -67,7 +63,11 @@ module.exports = {
 
       const filter = m => m.author.id === message.author.id;
 
-      await canalPrivado.send("🎯 **Bem-vindo à inscrição da Liga!**\nResponda tudo com atenção.");
+      // ✅ Mensagem inicial mencionando o IGL
+      await canalPrivado.send(
+        `👑 <@${message.author.id}> **você iniciou uma inscrição oficial da Liga BSS.**\n` +
+        `Responda todas as perguntas com atenção.`
+      );
 
       // ================= NOME DO TIME =================
       await canalPrivado.send("🏷️ **Nome da equipe:**");
@@ -76,14 +76,17 @@ module.exports = {
       const nomeTime = nomeTimeMsg.content;
       await nomeTimeMsg.delete();
 
-      // ================= JOGADORES =================
+      // ================= JOGADORES (5 a 8) =================
       const jogadores = [];
 
       for (let i = 1; i <= 8; i++) {
+
         if (i === 6) {
           await canalPrivado.send(
-            "⚠️ **ATENÇÃO:** Caso sua equipe não tenha 6º, 7º ou 8º player,\n" +
-            "digite apenas **`.`** nas próximas perguntas.\n\n🙏 Obrigado, Administração BSS"
+            "⚠️ **ATENÇÃO:**\n" +
+            "A partir do **6º player**, caso sua equipe não tenha mais jogadores,\n" +
+            "digite apenas **`.`** nas próximas perguntas.\n\n" +
+            "🙏 Obrigado,\n**Administração BSS**"
           );
         }
 
@@ -111,6 +114,11 @@ module.exports = {
         jogadores.push({ nick, funcao, steam });
       }
 
+      // 🔒 Verificar mínimo de 5 jogadores
+      if (jogadores.length < 5) {
+        return canalPrivado.send("❌ A equipe deve ter no mínimo **5 jogadores**.");
+      }
+
       // ================= REGISTRAR TIME =================
       const slotLivre = timesData.length + 1;
 
@@ -126,10 +134,17 @@ module.exports = {
       // ================= CANAL ADMIN =================
       const canalAdmin = await message.guild.channels.fetch(CANAL_ADMIN_ID);
 
-      let adminMsg = `📋 **NOVA INSCRIÇÃO**\n\n🏷️ **Equipe:** ${nomeTime}\n👑 **IGL:** <@${message.author.id}>\n\n`;
+      let adminMsg =
+        `📋 **NOVA INSCRIÇÃO RECEBIDA**\n\n` +
+        `🏷️ **Equipe:** ${nomeTime}\n` +
+        `👑 **IGL:** <@${message.author.id}>\n\n`;
 
       jogadores.forEach((j, i) => {
-        adminMsg += `**Player ${i + 1}**\nNick: ${j.nick}\nFunção: ${j.funcao}\nSteam: ${j.steam}\n\n`;
+        adminMsg +=
+          `**Player ${i + 1}**\n` +
+          `Nick: ${j.nick}\n` +
+          `Função: ${j.funcao}\n` +
+          `Steam: ${j.steam}\n\n`;
       });
 
       await canalAdmin.send(adminMsg);
@@ -142,7 +157,7 @@ module.exports = {
         .setTitle("✅ EQUIPE REGISTRADA")
         .setDescription(
           `🏆 **Equipe ${nomeTime} registrada com sucesso na Liga BSS!**\n\n` +
-          `📌 Qualquer dúvida, entre em contato com o suporte.\n` +
+          `📌 Qualquer dúvida, procure o suporte.\n` +
           `💚 Boa sorte na competição!`
         )
         .setFooter({ text: "Administração BSS" });
@@ -150,7 +165,7 @@ module.exports = {
       await canalPublico.send({ embeds: [embedPublico] });
 
       // ================= FINAL =================
-      await canalPrivado.send("✅ **Inscrição concluída com sucesso!**\nEste canal será fechado.");
+      await canalPrivado.send("✅ **Inscrição concluída com sucesso!**\nEste canal será encerrado.");
       setTimeout(() => canalPrivado.delete(), 10000);
 
     } catch (err) {

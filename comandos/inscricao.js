@@ -1,5 +1,8 @@
-const { ChannelType, PermissionFlagsBits } = require("discord.js");
-const { salvarTimes } = require("../utils/timesStore");
+const {
+  ChannelType,
+  PermissionFlagsBits,
+  EmbedBuilder
+} = require("discord.js");
 
 module.exports = {
   nome: "inscricao",
@@ -29,16 +32,31 @@ module.exports = {
         type: ChannelType.GuildText,
         parent: CATEGORIA_PRIVADA_ID,
         permissionOverwrites: [
-          { id: message.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-          { id: message.author.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+          {
+            id: message.guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel]
+          },
+          {
+            id: message.author.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages
+            ]
+          }
         ]
       });
 
-      await canalPrivado.send(
-        `👑 <@${message.author.id}>\n` +
-        `Vamos iniciar a **inscrição da sua equipe**.\n` +
-        `Responda com atenção às perguntas abaixo.`
-      );
+      const embedInicio = new EmbedBuilder()
+        .setColor("Blue")
+        .setTitle("📝 Inscrição de Equipe")
+        .setDescription(
+          `👑 <@${message.author.id}>\n` +
+          `Vamos iniciar a **inscrição da sua equipe**.\n\n` +
+          `Responda às perguntas com atenção.\n` +
+          `🔒 Este canal será fechado automaticamente ao final.`
+        );
+
+      await canalPrivado.send({ embeds: [embedInicio] });
 
       // ===== NOME DO TIME =====
       await canalPrivado.send("🏷️ **Digite o nome da equipe:**");
@@ -78,53 +96,58 @@ module.exports = {
         return canalPrivado.send("❌ A equipe deve conter **no mínimo 5 jogadores**.");
       }
 
-      // ===== CRIAR TIME =====
-      const novoTime = {
-        slot: global.timesData.length + 1,
-        nome: nomeTime,
-        igl: message.author.id,
-        jogadores
-      };
-
-      global.timesData.push(novoTime);
-
-      // 💾 SALVAR NO JSON (AGORA SIM)
-      salvarTimes(global.timesData);
-
-      // ===== CANAL ADMIN =====
+      // ===== EMBED ADMIN =====
       const canalAdmin = await message.guild.channels.fetch(CANAL_ADMIN_ID);
 
-      let adminMsg =
-        `📋 **Nova equipe cadastrada**\n\n` +
-        `🏷️ **Equipe:** ${novoTime.nome}\n` +
-        `👑 **IGL:** <@${novoTime.igl}>\n\n`;
+      const embedAdmin = new EmbedBuilder()
+        .setColor("Gold")
+        .setTitle("📋 Nova Equipe Inscrita")
+        .addFields(
+          { name: "Equipe", value: nomeTime },
+          { name: "IGL", value: `<@${message.author.id}>` }
+        );
 
       jogadores.forEach((j, i) => {
-        adminMsg +=
-          `**Player ${i + 1}**\n` +
-          `Nick: ${j.nick}\n` +
-          `Função: ${j.funcao}\n` +
-          `Steam: ${j.steam}\n\n`;
+        embedAdmin.addFields({
+          name: `Player ${i + 1}`,
+          value:
+            `Nick: ${j.nick}\n` +
+            `Função: ${j.funcao}\n` +
+            `Steam: ${j.steam}`
+        });
       });
 
-      canalAdmin.send(adminMsg);
+      canalAdmin.send({ embeds: [embedAdmin] });
 
-      // ===== MENSAGEM FINAL NO PRIVADO =====
-      await canalPrivado.send(
-        `✅ **Inscrição finalizada com sucesso!**\n\n` +
-        `🏆 **Equipe ${novoTime.nome} registrada na Liga BSS**\n` +
-        `📞 Qualquer dúvida, entre em contato com o suporte.\n\n` +
-        `_Obrigado por confiar no nosso trabalho — Administração BSS_`
-      );
+      // ===== EMBED PÚBLICO =====
+      const embedPublico = new EmbedBuilder()
+        .setColor("Green")
+        .setTitle("✅ INSCRIÇÃO CONFIRMADA")
+        .setDescription(
+          `🏷️ **Equipe:** ${nomeTime}\n` +
+          `👑 **IGL:** <@${message.author.id}>\n\n` +
+          `💙 A organização agradece a confiança!\n` +
+          `📞 Em caso de dúvidas, procure o suporte.`
+        )
+        .setFooter({ text: "Liga BSS • Boa sorte!" });
 
-      // ===== MENSAGEM NO CANAL PÚBLICO =====
-      await message.channel.send(
-        `📢 **INSCRIÇÃO CONFIRMADA**\n\n` +
-        `🏷️ **Equipe ${novoTime.nome}** foi registrada na **Liga BSS**\n` +
-        `👑 IGL: <@${novoTime.igl}>\n\n` +
-        `💙 A organização agradece a confiança!\n` +
-        `📞 Em caso de dúvidas, procure o suporte.`
-      );
+      await message.channel.send({ embeds: [embedPublico] });
+
+      // ===== FINAL + FECHAR CANAL =====
+      const embedFinal = new EmbedBuilder()
+        .setColor("Green")
+        .setTitle("🎉 Inscrição Finalizada")
+        .setDescription(
+          `A equipe **${nomeTime}** foi registrada com sucesso.\n\n` +
+          `🔒 Este canal será fechado em **30 segundos**.\n\n` +
+          `_Obrigado, Administração BSS_`
+        );
+
+      await canalPrivado.send({ embeds: [embedFinal] });
+
+      setTimeout(() => {
+        canalPrivado.delete().catch(() => {});
+      }, 30000);
 
     } catch (err) {
       console.error("Erro no comando inscrição:", err);

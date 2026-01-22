@@ -1,8 +1,7 @@
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
-const fs = require('fs');
-require('dotenv').config();
+const { Client, GatewayIntentBits, Collection } = require("discord.js");
+const fs = require("fs");
+const { carregarTimes } = require("./utils/timesStore");
 
-// Criar o client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -11,43 +10,38 @@ const client = new Client({
   ]
 });
 
-// Criar coleção de comandos
 client.commands = new Collection();
 
-// Carregar arquivos de comandos
-const commandFiles = fs.readdirSync('./comandos').filter(file => file.endsWith('.js'));
+// 🔒 CARREGAR TIMES DO JSON AO INICIAR
+global.timesData = carregarTimes();
+
+// 📂 CARREGAR COMANDOS
+const commandFiles = fs.readdirSync("./comandos").filter(file => file.endsWith(".js"));
 for (const file of commandFiles) {
   const command = require(`./comandos/${file}`);
   client.commands.set(command.nome, command);
-  console.log(`✅ Comando carregado: ${command.nome}`);
 }
 
-// Evento de mensagens
-client.on('messageCreate', async message => {
+client.once("clientReady", () => {
+  console.log(`✅ Bot online como ${client.user.tag}`);
+});
+
+client.on("messageCreate", async message => {
   if (message.author.bot) return;
+  if (!message.content.startsWith(".")) return;
 
-  const prefix = '.'; // Defina o seu prefixo
-  if (!message.content.startsWith(prefix)) return;
+  const args = message.content.slice(1).trim().split(/ +/);
+  const commandName = args.shift().toLowerCase();
 
-  const args = message.content.slice(prefix.length).trim().split(/ +/);
-  const cmdName = args.shift().toLowerCase();
-
-  const command = client.commands.get(cmdName);
+  const command = client.commands.get(commandName);
   if (!command) return;
 
   try {
-    // Passa o client para os comandos
-    await command.execute(message, args, client);
+    await command.execute(message, args);
   } catch (err) {
-    console.error('Erro ao executar comando:', err);
-    message.reply('❌ Ocorreu um erro ao executar o comando!');
+    console.error(err);
+    message.reply("❌ Ocorreu um erro ao executar o comando.");
   }
 });
 
-// Evento ready
-client.once('ready', () => {
-  console.log(`🤖 Bot iniciado como ${client.user.tag}`);
-});
-
-// Login do bot
 client.login(process.env.TOKEN);

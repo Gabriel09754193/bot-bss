@@ -1,17 +1,15 @@
 const { PermissionFlagsBits } = require("discord.js");
+const { salvarTimes } = require("../utils/timesStore");
 
 module.exports = {
   nome: "removertime",
 
   async execute(message, args) {
-    // 🔒 Apenas admins
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return message.reply("❌ Apenas administradores podem usar este comando.");
     }
 
-    const timesData = global.timesData || [];
-
-    if (timesData.length === 0) {
+    if (global.timesData.length === 0) {
       return message.reply("❌ Não há equipes cadastradas.");
     }
 
@@ -21,27 +19,29 @@ module.exports = {
       return message.reply("❌ Use: `.removertime <slot>` (1 a 16)");
     }
 
-    const index = timesData.findIndex(t => t.slot === slot);
+    const index = global.timesData.findIndex(t => t.slot === slot);
 
     if (index === -1) {
       return message.reply(`❌ Nenhuma equipe encontrada no slot **${slot}**.`);
     }
 
-    const timeRemovido = timesData[index];
+    const timeRemovido = global.timesData[index];
 
-    // ❌ Remover time
-    timesData.splice(index, 1);
+    global.timesData.splice(index, 1);
 
     // 🔄 Reorganizar slots
-    timesData.forEach((time, i) => {
+    global.timesData.forEach((time, i) => {
       time.slot = i + 1;
     });
 
-    await message.channel.send(
+    // 💾 SALVAR NO JSON
+    salvarTimes(global.timesData);
+
+    message.channel.send(
       `🗑️ **Equipe removida com sucesso!**\n\n` +
       `🏷️ **Equipe:** ${timeRemovido.nome}\n` +
       `👑 **IGL:** <@${timeRemovido.igl}>\n` +
-      `📍 Slot liberado e tabela reorganizada.`
+      `📍 Slots reorganizados automaticamente.`
     );
   }
 };

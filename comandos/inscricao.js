@@ -1,176 +1,109 @@
-const {
-  PermissionFlagsBits,
-  ChannelType,
-  EmbedBuilder
-} = require("discord.js");
-
-const timesData = global.timesData || [];
-global.timesData = timesData;
+const { ChannelType, PermissionFlagsBits } = require("discord.js");
+const { salvarTimes } = require("../utils/timesStore");
 
 module.exports = {
   nome: "inscricao",
 
   async execute(message) {
+    // 🔧 CONFIGURAÇÃO
+    const CANAL_INSCRICAO_ID = "1463260686011338814";
+    const CATEGORIA_PRIVADA_ID = "1463748578932687001";
+    const CARGO_IGL_ID = "1463258074310508765";
+    const CANAL_ADMIN_ID = "1463542650568179766";
+
+    // 🔒 Apenas no canal correto
+    if (message.channel.id !== CANAL_INSCRICAO_ID) {
+      return message.reply("❌ Este comando só pode ser usado no canal de inscrições.");
+    }
+
+    // 🔒 Apenas IGL
+    if (!message.member.roles.cache.has(CARGO_IGL_ID)) {
+      return message.reply("❌ Apenas IGLs podem realizar inscrições.");
+    }
+
+    const filter = m => m.author.id === message.author.id;
+
     try {
-      // ================= CONFIGURAÇÕES =================
-      const CANAL_INSCRICAO_ID = "1463260686011338814";
-      const CARGO_IGL_ID = "1463258074310508765";
-      const CATEGORIA_INSC_ID = "1463748578932687001";
-      const CANAL_ADMIN_ID = "1463542650568179766";
-      const CANAL_PUBLICO_ID = "1463260686011338814";
-      const LIMITE_TIMES = 16;
-      // =================================================
-
-      if (message.channel.id !== CANAL_INSCRICAO_ID) {
-        return message.reply("❌ Este comando só pode ser usado no canal de inscrições.");
-      }
-
-      if (!message.member.roles.cache.has(CARGO_IGL_ID)) {
-        return message.reply("❌ Apenas **IGLs** podem realizar a inscrição.");
-      }
-
-      if (timesData.length >= LIMITE_TIMES) {
-        return message.reply("❌ O limite de equipes já foi atingido.");
-      }
-
-      await message.delete();
-
-      // 📂 Criar canal privado
+      // Criar canal privado
       const canalPrivado = await message.guild.channels.create({
         name: `inscricao-${message.author.username}`,
         type: ChannelType.GuildText,
-        parent: CATEGORIA_INSC_ID,
+        parent: CATEGORIA_PRIVADA_ID,
         permissionOverwrites: [
-          {
-            id: message.guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel]
-          },
-          {
-            id: message.author.id,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages
-            ]
-          },
-          {
-            id: message.guild.roles.cache.find(r =>
-              r.permissions.has(PermissionFlagsBits.Administrator)
-            ).id,
-            allow: [PermissionFlagsBits.ViewChannel]
-          }
+          { id: message.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: message.author.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
         ]
       });
 
-      const filter = m => m.author.id === message.author.id;
+      await canalPrivado.send(`👑 <@${message.author.id}>, vamos iniciar sua inscrição!`);
 
-      // ✅ Mensagem inicial mencionando o IGL
-      await canalPrivado.send(
-        `👑 <@${message.author.id}> **você iniciou uma inscrição oficial da Liga BSS.**\n` +
-        `Responda todas as perguntas com atenção.`
-      );
+      // Nome do time
+      await canalPrivado.send("🏷️ **Digite o nome da equipe:**");
+      const nomeTime = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
+      if (!nomeTime) return canalPrivado.send("❌ Tempo esgotado.");
 
-      // ================= NOME DO TIME =================
-      await canalPrivado.send("🏷️ **Nome da equipe:**");
-      const nomeTimeMsg = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
-      if (!nomeTimeMsg) return canalPrivado.send("❌ Tempo esgotado.");
-      const nomeTime = nomeTimeMsg.content;
-      await nomeTimeMsg.delete();
-
-      // ================= JOGADORES (5 a 8) =================
       const jogadores = [];
 
+      // Jogadores (1 a 8)
       for (let i = 1; i <= 8; i++) {
-
         if (i === 6) {
-          await canalPrivado.send(
-            "⚠️ **ATENÇÃO:**\n" +
-            "A partir do **6º player**, caso sua equipe não tenha mais jogadores,\n" +
-            "digite apenas **`.`** nas próximas perguntas.\n\n" +
-            "🙏 Obrigado,\n**Administração BSS**"
-          );
+          await canalPrivado.send("⚠️ **Caso não tenha mais jogadores, envie apenas `.`**\n_Antenciosamente, Administração BSS_");
         }
 
-        await canalPrivado.send(`👤 **Player ${i} – Nick:**`);
-        const nickMsg = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
-        if (!nickMsg) return canalPrivado.send("❌ Tempo esgotado.");
+        await canalPrivado.send(`🎮 **Player ${i} - Nick:**`);
+        const nick = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
+        if (!nick || nick.content === ".") break;
 
-        const nick = nickMsg.content;
-        await nickMsg.delete();
+        await canalPrivado.send(`🧠 **Player ${i} - Função:**`);
+        const funcao = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
 
-        if (nick === "." && i >= 6) break;
+        await canalPrivado.send(`🔗 **Player ${i} - Link do perfil Steam:**`);
+        const steam = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
 
-        await canalPrivado.send(`🎮 **Player ${i} – Função:**`);
-        const funcMsg = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
-        if (!funcMsg) return canalPrivado.send("❌ Tempo esgotado.");
-        const funcao = funcMsg.content;
-        await funcMsg.delete();
-
-        await canalPrivado.send(`🔗 **Player ${i} – LINK do perfil Steam:**`);
-        const steamMsg = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
-        if (!steamMsg) return canalPrivado.send("❌ Tempo esgotado.");
-        const steam = steamMsg.content;
-        await steamMsg.delete();
-
-        jogadores.push({ nick, funcao, steam });
+        jogadores.push({
+          nick: nick.content,
+          funcao: funcao.content,
+          steam: steam.content
+        });
       }
 
-      // 🔒 Verificar mínimo de 5 jogadores
       if (jogadores.length < 5) {
-        return canalPrivado.send("❌ A equipe deve ter no mínimo **5 jogadores**.");
+        return canalPrivado.send("❌ A equipe deve ter no mínimo 5 jogadores.");
       }
 
-      // ================= REGISTRAR TIME =================
-      const slotLivre = timesData.length + 1;
-
-      const timeFinal = {
-        slot: slotLivre,
-        nome: nomeTime,
+      // Criar time
+      const novoTime = {
+        slot: global.timesData.length + 1,
+        nome: nomeTime.content,
         igl: message.author.id,
         jogadores
       };
 
-      timesData.push(timeFinal);
+      global.timesData.push(novoTime);
 
-      // ================= CANAL ADMIN =================
+      // 💾 SALVAR NO JSON (AQUI ESTAVA O PROBLEMA)
+      salvarTimes(global.timesData);
+
+      // Enviar para admin
       const canalAdmin = await message.guild.channels.fetch(CANAL_ADMIN_ID);
-
-      let adminMsg =
-        `📋 **NOVA INSCRIÇÃO RECEBIDA**\n\n` +
-        `🏷️ **Equipe:** ${nomeTime}\n` +
-        `👑 **IGL:** <@${message.author.id}>\n\n`;
+      let texto = `📋 **Nova equipe cadastrada**\n\n🏷️ **${novoTime.nome}**\n👑 IGL: <@${novoTime.igl}>\n\n`;
 
       jogadores.forEach((j, i) => {
-        adminMsg +=
-          `**Player ${i + 1}**\n` +
-          `Nick: ${j.nick}\n` +
-          `Função: ${j.funcao}\n` +
-          `Steam: ${j.steam}\n\n`;
+        texto += `**${i + 1}. ${j.nick}** (${j.funcao})\n${j.steam}\n\n`;
       });
 
-      await canalAdmin.send(adminMsg);
+      canalAdmin.send(texto);
 
-      // ================= CANAL PÚBLICO =================
-      const canalPublico = await message.guild.channels.fetch(CANAL_PUBLICO_ID);
-
-      const embedPublico = new EmbedBuilder()
-        .setColor("Green")
-        .setTitle("✅ EQUIPE REGISTRADA")
-        .setDescription(
-          `🏆 **Equipe ${nomeTime} registrada com sucesso na Liga BSS!**\n\n` +
-          `📌 Qualquer dúvida, procure o suporte.\n` +
-          `💚 Boa sorte na competição!`
-        )
-        .setFooter({ text: "Administração BSS" });
-
-      await canalPublico.send({ embeds: [embedPublico] });
-
-      // ================= FINAL =================
-      await canalPrivado.send("✅ **Inscrição concluída com sucesso!**\nEste canal será encerrado.");
-      setTimeout(() => canalPrivado.delete(), 10000);
+      await canalPrivado.send(
+        `✅ **Equipe registrada com sucesso!**\n\n` +
+        `🏆 **Equipe ${novoTime.nome} registrada na Liga BSS**\n` +
+        `📞 Qualquer dúvida entre em contato com o suporte.\n\n` +
+        `_Obrigado, Administração BSS_`
+      );
 
     } catch (err) {
-      console.error("Erro no .inscricao:", err);
-      message.channel.send("❌ Ocorreu um erro durante a inscrição.");
+      console.error("Erro inscrição:", err);
+      message.reply("❌ Ocorreu um erro ao realizar a inscrição.");
     }
   }
 };

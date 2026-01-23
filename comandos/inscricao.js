@@ -7,16 +7,21 @@ module.exports = {
   async execute(message, args) {
 
     // ==== CONFIGURAÇÃO: COLE OS IDS CORRETOS AQUI ====
-    const CATEGORY_ID = "1463748578932687001";       
-    const PUBLIC_CHANNEL_ID = "1463260829230174301"; 
-    const ADMIN_CHANNEL_ID = "1463542650568179766";      
-    const IGL_ROLE_ID = "1463258074310508765"; // cargo que será dado ao final
+    const CATEGORY_ID = "COLE_AQUI_ID_DA_CATEGORIA";       
+    const PUBLIC_CHANNEL_ID = "COLE_AQUI_ID_DO_CHAT_PUBLICO"; 
+    const ADMIN_CHANNEL_ID = "COLE_AQUI_ID_DO_CHAT_ADM";      
+    const IGL_ROLE_ID = "COLE_AQUI_ID_DO_CARGO_IGL_JOGO"; // cargo que será dado ao final
     // ================================================
 
     // Evita múltiplas inscrições
     if (inscricoesAtivas.has(message.author.id)) {
       return message.reply("❌ Você já tem uma inscrição em andamento.");
     }
+
+    // Mensagem inicial no chat onde o comando foi executado
+    await message.channel.send({
+      content: `🔥 ${message.author} iniciou uma inscrição! Obrigado por escolher a **Base Strike Series (BSS)**! Boa sorte!`
+    });
 
     // Cria canal privado temporário
     const channel = await message.guild.channels.create({
@@ -129,17 +134,23 @@ module.exports = {
         if (role) await message.member.roles.add(role).catch(() => console.log("Erro ao adicionar cargo IGL."));
       }
 
-      // Chat público com embed bonito
+      // Chat público com embed bonito tipo "mini-cartão" da equipe
       if (publicChannel) {
         const embedPublic = new EmbedBuilder()
           .setTitle(`🎉 Equipe ${inscricao.teamName} Inscrita!`)
-          .setDescription(
-            `Equipe **${inscricao.teamName}** cadastrada na **Base Strike Series (BSS)**!\n\n` +
-            `🏆 Preparem-se para os jogos!\n` +
-            `🙏 Obrigado por confiar na administração e colocar sua equipe à disposição.`
-          )
           .setColor("Green")
-          .setFooter({ text: "Base Strike Series (BSS) - A liga que conecta equipes e competição!" });
+          .setDescription(
+            `🏆 **Equipe:** ${inscricao.teamName}\n` +
+            `📌 **Status:** Cadastrada no banco de dados e em análise quanto aos requisitos de jogos\n` +
+            `👤 **IGL:** ${message.author}\n` +
+            `🙏 Obrigado ao IGL e à equipe pela inscrição!\n` +
+            `Ass: BSS Staff's`
+          );
+
+        // Adiciona mini-cartão por player
+        inscricao.players.forEach((p, i) => {
+          embedPublic.addFields({ name: `Player ${i+1}: ${p.nick}`, value: `Função: ${p.funcao}\nSteam: ${p.steam}` });
+        });
 
         await publicChannel.send({ embeds: [embedPublic] });
       }

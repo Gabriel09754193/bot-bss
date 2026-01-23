@@ -1,157 +1,168 @@
-const {
-  ChannelType,
-  PermissionFlagsBits,
-  EmbedBuilder
-} = require("discord.js");
+const { PermissionsBitField, ChannelType, EmbedBuilder } = require("discord.js");
+
+const inscricoesAtivas = new Map();
 
 module.exports = {
   nome: "inscricao",
+  async execute(message, args) {
 
-  async execute(message) {
-    // ===== CONFIGURAÇÕES =====
-    const CANAL_INSCRICAO_ID = "1463260686011338814";
-    const CATEGORIA_PRIVADA_ID = "1463748578932687001";
-    const CARGO_IGL_ID = "1463258074310508765";
-    const CANAL_ADMIN_ID = "1463542650568179766";
+    // ==== CONFIGURAÇÃO: COLE OS IDS CORRETOS AQUI ====
+    const IGL_ROLE_ID = "COLE_AQUI_ID_DO_CARGO_IGL";              
+    const CATEGORY_ID = "COLE_AQUI_ID_DA_CATEGORIA";       
+    const PUBLIC_CHANNEL_ID = "COLE_AQUI_ID_DO_CHAT_PUBLICO"; 
+    const ADMIN_CHANNEL_ID = "COLE_AQUI_ID_DO_CHAT_ADM";      
+    // ================================================
 
-    // ===== RESTRIÇÕES =====
-    if (message.channel.id !== CANAL_INSCRICAO_ID) {
-      return message.reply("❌ Este comando só pode ser usado no canal de inscrições.");
+    // Verifica se o usuário possui o cargo IGL
+    if (!message.member.roles.cache.has(IGL_ROLE_ID)) {
+      return message.reply("❌ Apenas membros com o cargo **IGL** podem usar este comando.");
     }
 
-    if (!message.member.roles.cache.has(CARGO_IGL_ID)) {
-      return message.reply("❌ Apenas IGLs podem utilizar este comando.");
+    // Evita múltiplas inscrições
+    if (inscricoesAtivas.has(message.author.id)) {
+      return message.reply("❌ Você já tem uma inscrição em andamento.");
     }
 
-    const filter = m => m.author.id === message.author.id;
+    // Cria canal privado temporário
+    const channel = await message.guild.channels.create({
+      name: `inscricao-temp`,
+      type: ChannelType.GuildText,
+      parent: CATEGORY_ID,
+      permissionOverwrites: [
+        { id: message.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: message.author.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+      ],
+    });
 
-    try {
-      // ===== CRIAR CANAL PRIVADO =====
-      const canalPrivado = await message.guild.channels.create({
-        name: `inscricao-${message.author.username}`,
-        type: ChannelType.GuildText,
-        parent: CATEGORIA_PRIVADA_ID,
-        permissionOverwrites: [
-          {
-            id: message.guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel]
-          },
-          {
-            id: message.author.id,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages
-            ]
-          }
-        ]
-      });
+    const publicChannel = message.guild.channels.cache.get(PUBLIC_CHANNEL_ID);
+    const adminChannel = message.guild.channels.cache.get(ADMIN_CHANNEL_ID);
 
-      const embedInicio = new EmbedBuilder()
-        .setColor("Blue")
-        .setTitle("📝 Inscrição de Equipe")
-        .setDescription(
-          `👑 <@${message.author.id}>\n` +
-          `Vamos iniciar a **inscrição da sua equipe**.\n\n` +
-          `Responda às perguntas com atenção.\n` +
-          `🔒 Este canal será fechado automaticamente ao final.`
-        );
+    const maxPlayers = 8;
+    const minPlayers = 5;
 
-      await canalPrivado.send({ embeds: [embedInicio] });
+    // === Passo 1: Perguntar o nome do time ===
+    const askTeamName = async () => {
+      const embed = new EmbedBuilder()
+        .setTitle("🎯 Cadastro de Equipe - Base Strike Series (BSS)")
+        .setDescription("Digite o **nome do time** para iniciar a inscrição")
+        .setColor("Blue");
 
-      // ===== NOME DO TIME =====
-      await canalPrivado.send("🏷️ **Digite o nome da equipe:**");
-      const nomeMsg = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
-      if (!nomeMsg) return canalPrivado.send("❌ Tempo esgotado.");
+      await channel.send({ embeds: [embed] });
 
-      const nomeTime = nomeMsg.content;
-      const jogadores = [];
+      const filter = m => m.author.id === message.author.id;
+      const collector = channel.createMessageCollector({ filter, time: 600000, max: 1 });
 
-      // ===== JOGADORES =====
-      for (let i = 1; i <= 8; i++) {
-        if (i === 6) {
-          await canalPrivado.send(
-            "⚠️ **Caso sua equipe não tenha 6º, 7º ou 8º jogador, envie apenas `.`**\n" +
-            "_Obrigado, Administração BSS_"
-          );
+      collector.on("collect", m => {
+        const teamName = m.content.trim();
+        if (!teamName) {
+          channel.send("❌ Nome inválido. Tente novamente.");
+          return askTeamName();
         }
 
-        await canalPrivado.send(`🎮 **Player ${i} – Nick:**`);
-        const nickMsg = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
-        if (!nickMsg || nickMsg.content === ".") break;
-
-        await canalPrivado.send(`🧠 **Player ${i} – Função:**`);
-        const funcaoMsg = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
-
-        await canalPrivado.send(`🔗 **Player ${i} – LINK do perfil Steam:**`);
-        const steamMsg = (await canalPrivado.awaitMessages({ filter, max: 1, time: 60000 })).first();
-
-        jogadores.push({
-          nick: nickMsg.content,
-          funcao: funcaoMsg.content,
-          steam: steamMsg.content
-        });
-      }
-
-      if (jogadores.length < 5) {
-        return canalPrivado.send("❌ A equipe deve conter **no mínimo 5 jogadores**.");
-      }
-
-      // ===== EMBED ADMIN =====
-      const canalAdmin = await message.guild.channels.fetch(CANAL_ADMIN_ID);
-
-      const embedAdmin = new EmbedBuilder()
-        .setColor("Gold")
-        .setTitle("📋 Nova Equipe Inscrita")
-        .addFields(
-          { name: "Equipe", value: nomeTime },
-          { name: "IGL", value: `<@${message.author.id}>` }
-        );
-
-      jogadores.forEach((j, i) => {
-        embedAdmin.addFields({
-          name: `Player ${i + 1}`,
-          value:
-            `Nick: ${j.nick}\n` +
-            `Função: ${j.funcao}\n` +
-            `Steam: ${j.steam}`
-        });
+        // Inicia inscrição dos players
+        inscricoesAtivas.set(message.author.id, { teamName, players: [] });
+        channel.setName(`inscricao-${teamName}`);
+        askNextPlayer(1);
       });
 
-      canalAdmin.send({ embeds: [embedAdmin] });
+      collector.on("end", collected => {
+        if (collected.size === 0) {
+          channel.send("⏰ Tempo esgotado. Inscrição encerrada automaticamente.");
+          channel.delete();
+        }
+      });
+    };
 
-      // ===== EMBED PÚBLICO =====
-      const embedPublico = new EmbedBuilder()
-        .setColor("Green")
-        .setTitle("✅ INSCRIÇÃO CONFIRMADA")
-        .setDescription(
-          `🏷️ **Equipe:** ${nomeTime}\n` +
-          `👑 **IGL:** <@${message.author.id}>\n\n` +
-          `💙 A organização agradece a confiança!\n` +
-          `📞 Em caso de dúvidas, procure o suporte.`
-        )
-        .setFooter({ text: "Liga BSS • Boa sorte!" });
+    // === Passo 2: Perguntar os jogadores ===
+    const askNextPlayer = async (playerNumber) => {
+      const inscricao = inscricoesAtivas.get(message.author.id);
+      if (!inscricao) return;
 
-      await message.channel.send({ embeds: [embedPublico] });
+      if (playerNumber > maxPlayers) return finish();
 
-      // ===== FINAL + FECHAR CANAL =====
-      const embedFinal = new EmbedBuilder()
-        .setColor("Green")
-        .setTitle("🎉 Inscrição Finalizada")
-        .setDescription(
-          `A equipe **${nomeTime}** foi registrada com sucesso.\n\n` +
-          `🔒 Este canal será fechado em **30 segundos**.\n\n` +
-          `_Obrigado, Administração BSS_`
-        );
+      const embed = new EmbedBuilder()
+        .setTitle(`👤 Cadastro PLAYER ${playerNumber}`)
+        .setDescription("Responda com: **NICK, FUNÇÃO, LINK da Steam**\nApós o 5º player, digite apenas `.` se não houver mais jogadores.")
+        .setColor("Purple");
 
-      await canalPrivado.send({ embeds: [embedFinal] });
+      await channel.send({ embeds: [embed] });
 
-      setTimeout(() => {
-        canalPrivado.delete().catch(() => {});
-      }, 30000);
+      const filter = m => m.author.id === message.author.id;
+      const collector = channel.createMessageCollector({ filter, time: 600000, max: 1 });
 
-    } catch (err) {
-      console.error("Erro no comando inscrição:", err);
-      message.reply("❌ Ocorreu um erro ao realizar a inscrição.");
-    }
-  }
+      collector.on("collect", m => {
+        const content = m.content.trim();
+
+        // Encerra inscrição se digitar "." após 5 players
+        if (content === "." && inscricao.players.length >= minPlayers) return finish();
+
+        const data = content.split(",").map(x => x.trim());
+        if (data.length !== 3) {
+          channel.send("❌ Formato inválido! Use: NICK, FUNÇÃO, LINK da Steam");
+          return askNextPlayer(playerNumber);
+        }
+
+        const [nick, funcao, steam] = data;
+        inscricao.players.push({ nick, funcao, steam });
+        playerNumber++;
+
+        // Aviso após o 5º player
+        if (inscricao.players.length === minPlayers && playerNumber <= maxPlayers) {
+          channel.send("⚠️ Já tem 5 players. Digite `.` se não houver mais jogadores, ou continue adicionando os próximos players.");
+        }
+
+        // Continua para próximo player
+        askNextPlayer(playerNumber);
+      });
+
+      collector.on("end", collected => {
+        if (collected.size === 0) {
+          channel.send("⏰ Tempo esgotado. Inscrição encerrada automaticamente.");
+          finish();
+        }
+      });
+    };
+
+    // === Passo 3: Finalizar inscrição ===
+    const finish = async () => {
+      const inscricao = inscricoesAtivas.get(message.author.id);
+      if (!inscricao) return;
+
+      // Chat público com embed bonito
+      if (publicChannel) {
+        const embedPublic = new EmbedBuilder()
+          .setTitle(`🎉 Equipe ${inscricao.teamName} Inscrita!`)
+          .setDescription(
+            `Equipe **${inscricao.teamName}** cadastrada na **Base Strike Series (BSS)**!\n\n` +
+            `🏆 Preparem-se para os jogos!\n` +
+            `🙏 Obrigado por confiar na administração e colocar sua equipe à disposição.`
+          )
+          .setColor("Green")
+          .setFooter({ text: "Base Strike Series (BSS) - A liga que conecta equipes e competição!" });
+
+        await publicChannel.send({ embeds: [embedPublic] });
+      }
+
+      // Chat admin com todas informações detalhadas
+      if (adminChannel) {
+        const embedAdmin = new EmbedBuilder()
+          .setTitle(`📋 Inscrição completa da equipe: ${inscricao.teamName}`)
+          .setColor("Yellow");
+
+        inscricao.players.forEach((p, i) => {
+          embedAdmin.addFields({ name: `PLAYER ${i+1}`, value: `NICK: ${p.nick}\nFUNÇÃO: ${p.funcao}\nSTEAM: ${p.steam}` });
+        });
+
+        await adminChannel.send({ embeds: [embedAdmin] });
+      }
+
+      // Deleta canal privado
+      channel.delete();
+
+      // Remove do map
+      inscricoesAtivas.delete(message.author.id);
+    };
+
+    askTeamName();
+  },
 };

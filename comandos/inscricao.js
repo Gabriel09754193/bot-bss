@@ -7,16 +7,11 @@ module.exports = {
   async execute(message, args) {
 
     // ==== CONFIGURAÇÃO: COLE OS IDS CORRETOS AQUI ====
-    const IGL_ROLE_ID = "1463258074310508765";              
-    const CATEGORY_ID = "1463748578932687001";       
-    const PUBLIC_CHANNEL_ID = "1463260829230174301"; 
-    const ADMIN_CHANNEL_ID = "1463542650568179766";      
+    const CATEGORY_ID = "COLE_AQUI_ID_DA_CATEGORIA";       
+    const PUBLIC_CHANNEL_ID = "COLE_AQUI_ID_DO_CHAT_PUBLICO"; 
+    const ADMIN_CHANNEL_ID = "COLE_AQUI_ID_DO_CHAT_ADM";      
+    const IGL_ROLE_ID = "COLE_AQUI_ID_DO_CARGO_IGL_JOGO"; // cargo que será dado ao final
     // ================================================
-
-    // Verifica se o usuário possui o cargo IGL
-    if (!message.member.roles.cache.has(IGL_ROLE_ID)) {
-      return message.reply("❌ Apenas membros com o cargo **IGL** podem usar este comando.");
-    }
 
     // Evita múltiplas inscrições
     if (inscricoesAtivas.has(message.author.id)) {
@@ -127,6 +122,12 @@ module.exports = {
     const finish = async () => {
       const inscricao = inscricoesAtivas.get(message.author.id);
       if (!inscricao) return;
+
+      // Adiciona cargo IGL de jogo ao autor
+      if (IGL_ROLE_ID) {
+        const role = message.guild.roles.cache.get(IGL_ROLE_ID);
+        if (role) await message.member.roles.add(role).catch(() => console.log("Erro ao adicionar cargo IGL."));
+      }
 
       // Chat público com embed bonito
       if (publicChannel) {

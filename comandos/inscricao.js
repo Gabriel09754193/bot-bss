@@ -7,13 +7,12 @@ module.exports = {
   async execute(message, args) {
 
     // ==== CONFIGURAÇÃO: COLE OS IDS CORRETOS AQUI ====
-    const CATEGORY_ID = "1463748578932687001";       
-    const PUBLIC_CHANNEL_ID = "1463260829230174301"; 
-    const ADMIN_CHANNEL_ID = "1463542650568179766";      
-    const IGL_ROLE_ID = "1463258074310508765"; // cargo que será dado ao final
+    const CATEGORY_ID = "COLE_AQUI_ID_DA_CATEGORIA";       
+    const PUBLIC_CHANNEL_ID = "COLE_AQUI_ID_DO_CHAT_PUBLICO"; 
+    const ADMIN_CHANNEL_ID = "COLE_AQUI_ID_DO_CHAT_ADM";      
+    const IGL_ROLE_ID = "COLE_AQUI_ID_DO_CARGO_IGL_JOGO"; // cargo que será dado ao final
     // ================================================
 
-    // Evita múltiplas inscrições
     if (inscricoesAtivas.has(message.author.id)) {
       return message.reply("❌ Você já tem uma inscrição em andamento.");
     }
@@ -45,7 +44,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setTitle("🎯 Cadastro de Equipe - Base Strike Series (BSS)")
         .setDescription("Digite o **nome do time** para iniciar a inscrição")
-        .setColor("Blue");
+        .setColor("#1E90FF");
 
       await channel.send({ embeds: [embed] });
 
@@ -59,7 +58,6 @@ module.exports = {
           return askTeamName();
         }
 
-        // Inicia inscrição dos players
         inscricoesAtivas.set(message.author.id, { teamName, players: [] });
         channel.setName(`inscricao-${teamName}`);
         askNextPlayer(1);
@@ -83,7 +81,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setTitle(`👤 Cadastro PLAYER ${playerNumber}`)
         .setDescription("Responda com: **NICK, FUNÇÃO, LINK da Steam**\nApós o 5º player, digite apenas `.` se não houver mais jogadores.")
-        .setColor("Purple");
+        .setColor("#8A2BE2");
 
       await channel.send({ embeds: [embed] });
 
@@ -93,7 +91,6 @@ module.exports = {
       collector.on("collect", m => {
         const content = m.content.trim();
 
-        // Encerra inscrição se digitar "." após 5 players
         if (content === "." && inscricao.players.length >= minPlayers) return finish();
 
         const data = content.split(",").map(x => x.trim());
@@ -106,12 +103,10 @@ module.exports = {
         inscricao.players.push({ nick, funcao, steam });
         playerNumber++;
 
-        // Aviso após o 5º player
         if (inscricao.players.length === minPlayers && playerNumber <= maxPlayers) {
           channel.send("⚠️ Já tem 5 players. Digite `.` se não houver mais jogadores, ou continue adicionando os próximos players.");
         }
 
-        // Continua para próximo player
         askNextPlayer(playerNumber);
       });
 
@@ -134,23 +129,28 @@ module.exports = {
         if (role) await message.member.roles.add(role).catch(() => console.log("Erro ao adicionar cargo IGL."));
       }
 
-      // Chat público com embed bonito tipo "mini-cartão" da equipe
+      // Chat público com embed colorido, mais chamativo
       if (publicChannel) {
+        let playersText = "";
+        inscricao.players.forEach((p, i) => {
+          let emoji = "🎮"; // padrão
+          const func = p.funcao.toLowerCase();
+          if (func.includes("sniper")) emoji = "🎯";
+          else if (func.includes("suporte")) emoji = "🛡️";
+          else if (func.includes("entry")) emoji = "⚡";
+          playersText += `${emoji} **${p.nick} / ${p.funcao}**\n`;
+        });
+
         const embedPublic = new EmbedBuilder()
           .setTitle(`🎉 Equipe ${inscricao.teamName} Inscrita!`)
-          .setColor("Green")
+          .setColor("#32CD32")
           .setDescription(
             `🏆 **Equipe:** ${inscricao.teamName}\n` +
-            `📌 **Status:** Cadastrada no banco de dados e em análise quanto aos requisitos de jogos\n` +
-            `👤 **IGL:** ${message.author}\n` +
-            `🙏 Obrigado ao IGL e à equipe pela inscrição!\n` +
+            `📌 **Status:** Cadastrada no banco de dados e em análise quanto aos requisitos de jogos\n\n` +
+            `**Players da equipe ${inscricao.teamName}:**\n${playersText}\n` +
+            `🙏 Agradecemos ao IGL e à equipe pela inscrição!\n` +
             `Ass: BSS Staff's`
           );
-
-        // Adiciona mini-cartão por player
-        inscricao.players.forEach((p, i) => {
-          embedPublic.addFields({ name: `Player ${i+1}: ${p.nick}`, value: `Função: ${p.funcao}\nSteam: ${p.steam}` });
-        });
 
         await publicChannel.send({ embeds: [embedPublic] });
       }
@@ -159,7 +159,7 @@ module.exports = {
       if (adminChannel) {
         const embedAdmin = new EmbedBuilder()
           .setTitle(`📋 Inscrição completa da equipe: ${inscricao.teamName}`)
-          .setColor("Yellow");
+          .setColor("#FFD700");
 
         inscricao.players.forEach((p, i) => {
           embedAdmin.addFields({ name: `PLAYER ${i+1}`, value: `NICK: ${p.nick}\nFUNÇÃO: ${p.funcao}\nSTEAM: ${p.steam}` });

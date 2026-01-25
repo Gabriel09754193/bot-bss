@@ -1,153 +1,141 @@
 const {
-  Events,
+  ChannelType,
+  PermissionsBitField,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder
 } = require("discord.js");
 
-/* ================= CONFIG ================= */
-
 const CONFIG = {
-  COMMAND_CHANNEL_ID: "1464661979133247518",
+  CATEGORY_PICKBAN_ID: "1464644395960893440",
   PUBLIC_CHANNEL_ID: "1464649761213780149",
   ADMIN_LOG_CHANNEL_ID: "1464661705417167064",
-  RESPONSE_TIME: 60
+  ALLOWED_CHANNEL_ID: "1464661979133247518",
+
+  MAPS: [
+    "Mirage",
+    "Inferno",
+    "Nuke",
+    "Overpass",
+    "Ancient",
+    "Anubis",
+    "Vertigo"
+  ]
 };
-
-const MAP_POOL = [
-  "Ancient",
-  "Anubis",
-  "Dust II",
-  "Inferno",
-  "Mirage",
-  "Nuke",
-  "Overpass"
-];
-
-const sessions = new Map();
-
-/* ================= COMANDO ================= */
 
 module.exports = {
-  name: Events.MessageCreate,
+  name: "pickban",
   async execute(message) {
-    if (!message.content.startsWith(".pickban")) return;
-    if (message.channel.id !== CONFIG.COMMAND_CHANNEL_ID) return;
+    if (message.channel.id !== CONFIG.ALLOWED_CHANNEL_ID) return;
 
-    if (!message.member.permissions.has("Administrator")) {
-      return message.reply("❌ Apenas administradores podem iniciar o pick/ban.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("❌ Apenas administradores podem usar esse comando.");
     }
 
-    const mentions = message.mentions.users;
-    if (mentions.size !== 2) {
-      return message.reply("❌ Mencione exatamente **2 IGLs**.");
+    const igls = message.mentions.users;
+    if (igls.size !== 2) {
+      return message.reply("❌ Use: `.pickban @IGL_TimeA @IGL_TimeB`");
     }
 
-    const [iglA, iglB] = [...mentions.values()];
+    const [iglA, iglB] = igls.map(u => u);
+    const teams = [
+      { user: iglA, name: "Time A" },
+      { user: iglB, name: "Time B" }
+    ];
 
-    await message.reply("✏️ Nome do **Time A**:");
-    const teamA = (await message.channel.awaitMessages({
-      max: 1, time: 30000, filter: m => m.author.id === message.author.id
-    })).first().content;
+    let maps = [...CONFIG.MAPS];
+    let picks = [];
+    let bans = [];
+    let turn = Math.floor(Math.random() * 2);
 
-    await message.reply("✏️ Nome do **Time B**:");
-    const teamB = (await message.channel.awaitMessages({
-      max: 1, time: 30000, filter: m => m.author.id === message.author.id
-    })).first().content;
-
-    const firstIGL = Math.random() < 0.5 ? iglA : iglB;
-
-    const session = {
-      iglA,
-      iglB,
-      teamA,
-      teamB,
-      currentIGL: firstIGL,
-      mapsLeft: [...MAP_POOL],
-      bansDone: 0,
-      picksDone: 0,
-      phase: "BAN"
-    };
-
-    sessions.set(message.id, session);
+    const channel = await message.guild.channels.create({
+      name: `pick-ban-${iglA.username}-vs-${iglB.username}`,
+      type: ChannelType.GuildText,
+      parent: CONFIG.CATEGORY_PICKBAN_ID,
+      permissionOverwrites: [
+        {
+          id: message.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: iglA.id,
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
+        },
+        {
+          id: iglB.id,
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
+        }
+      ]
+    });
 
     const publicChannel = message.guild.channels.cache.get(CONFIG.PUBLIC_CHANNEL_ID);
+    const logChannel = message.guild.channels.cache.get(CONFIG.ADMIN_LOG_CHANNEL_ID);
 
-    const msg = await publicChannel.send({
-      content: `🎮 **PICK/BAN BSS** — ${teamA} 🆚 ${teamB}\n👤 IGL da vez: ${firstIGL}`,
-      embeds: [buildEmbed(session)],
-      components: buildButtons(session)
-    });
+    await channel.send(`🎲 **Sorteio:** ${teams[turn].user} começa o veto!`);
 
-    session.publicMessage = msg;
-  }
-};
-
-/* ================= BOTÕES ================= */
-
-module.exports.interaction = {
-  name: Events.InteractionCreate,
-  async execute(interaction) {
-    if (!interaction.isButton()) return;
-
-    const session = [...sessions.values()].find(s => s.publicMessage.id === interaction.message.id);
-    if (!session) return;
-
-    if (interaction.user.id !== session.currentIGL.id) {
-      return interaction.reply({ content: "❌ Não é sua vez.", ephemeral: true });
+    async function updatePublic(text) {
+      if (publicChannel) await publicChannel.send(text);
+      if (logChannel) await logChannel.send(text);
     }
 
-    const map = interaction.customId.split("_")[1];
+    async function nextStep(type) {
+      const current = teams[turn];
+      const row = new ActionRowBuilder();
 
-    session.mapsLeft = session.mapsLeft.filter(m => m !== map);
-    session.bansDone++;
+      maps.forEach(map => {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`${type}_${map}`)
+            .setLabel(map)
+            .setStyle(type === "ban" ? ButtonStyle.Danger : ButtonStyle.Success)
+        );
+      });
 
-    session.currentIGL =
-      session.currentIGL.id === session.iglA.id ? session.iglB : session.iglA;
-
-    if (session.bansDone === 2) session.phase = "PICK";
-
-    await interaction.update({
-      content: `🎮 **PICK/BAN BSS** — ${session.teamA} 🆚 ${session.teamB}\n👤 IGL da vez: ${session.currentIGL}`,
-      embeds: [buildEmbed(session)],
-      components: buildButtons(session)
-    });
-  }
-};
-
-/* ================= UI ================= */
-
-function buildEmbed(session) {
-  return new EmbedBuilder()
-    .setTitle("🎮 Pick / Ban — BSS")
-    .setColor("#ff2b2b")
-    .setDescription(
-      `**Fase:** ${session.phase}\n` +
-      `**IGL da vez:** ${session.currentIGL}\n\n` +
-      `🗺️ **Mapas restantes:**\n` +
-      session.mapsLeft.map(m => `🟢 ${m}`).join("\n")
-    );
-}
-
-function buildButtons(session) {
-  const rows = [];
-  let row = new ActionRowBuilder();
-
-  session.mapsLeft.forEach(map => {
-    if (row.components.length === 5) {
-      rows.push(row);
-      row = new ActionRowBuilder();
+      await channel.send({
+        content: `👉 ${current.user}, escolha um **${type.toUpperCase()}**`,
+        components: [row]
+      });
     }
 
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`map_${map}`)
-        .setLabel(`${session.phase} ${map}`)
-        .setStyle(session.phase === "BAN" ? ButtonStyle.Danger : ButtonStyle.Success)
-    );
-  });
+    let phase = "ban"; // ban → pick → ban
+    let actionCount = 0;
 
-  rows.push(row);
-  return rows;
-}
+    const collector = channel.createMessageComponentCollector({ time: 15 * 60 * 1000 });
+
+    collector.on("collect", async interaction => {
+      if (interaction.user.id !== teams[turn].user.id) {
+        return interaction.reply({ content: "❌ Não é sua vez.", ephemeral: true });
+      }
+
+      const [type, map] = interaction.customId.split("_");
+      maps = maps.filter(m => m !== map);
+
+      if (type === "ban") bans.push({ team: teams[turn].name, map });
+      if (type === "pick") picks.push({ team: teams[turn].name, map });
+
+      await updatePublic(`🗺️ **${teams[turn].name} ${type.toUpperCase()}OU ${map}**`);
+
+      turn = turn === 0 ? 1 : 0;
+      actionCount++;
+
+      await interaction.update({ components: [] });
+
+      if (actionCount === 2) phase = "pick";
+      if (actionCount === 4) phase = "ban";
+      if (actionCount === 6) {
+        collector.stop();
+        const decider = maps[0];
+        const side = Math.random() > 0.5 ? "CT" : "TR";
+        await updatePublic(`🔥 **Mapa decisivo:** ${decider}\n🎯 **Lado sorteado:** ${side}`);
+        await channel.send("✅ Pick/Ban finalizado. Canal será fechado.");
+        setTimeout(() => channel.delete(), 10000);
+        return;
+      }
+
+      await nextStep(phase);
+    });
+
+    await nextStep("ban");
+  }
+};

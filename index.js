@@ -1,19 +1,14 @@
-const { 
-  Client, 
-  GatewayIntentBits, 
-  Collection, 
-  InteractionType 
-} = require("discord.js");
+const { Client, GatewayIntentBits, Collection, Partials } = require("discord.js");
 const fs = require("fs");
 require("dotenv").config();
 
-// 🔹 CLIENTE
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
+  partials: [Partials.Channel],
 });
 
 client.commands = new Collection();
@@ -28,12 +23,11 @@ for (const file of commandFiles) {
   client.commands.set(command.nome, command);
 }
 
-// 🤖 BOT ONLINE
 client.once("ready", () => {
   console.log(`🤖 Bot online como ${client.user.tag}`);
 });
 
-// 💬 COMANDOS COM .
+// 💬 COMANDOS COM PREFIXO .
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(".")) return;
@@ -45,33 +39,11 @@ client.on("messageCreate", async (message) => {
   if (!command) return;
 
   try {
-    await command.execute(message, args);
+    await command.execute(message, args, client);
   } catch (err) {
     console.error(err);
     message.reply("❌ Erro ao executar o comando.");
   }
 });
 
-// 🔘 INTERAÇÕES (BOTÕES)
-client.on("interactionCreate", async (interaction) => {
-  if (interaction.type !== InteractionType.MessageComponent) return;
-
-  const [cmd, action, matchId] = interaction.customId.split(":");
-  if (cmd !== "pickban") return;
-
-  const command = client.commands.get("pickban");
-  if (!command || !command.handleButton) return;
-
-  try {
-    await command.handleButton(interaction, action, matchId);
-  } catch (err) {
-    console.error(err);
-    interaction.reply({ 
-      content: "❌ Erro ao processar a ação.", 
-      ephemeral: true 
-    });
-  }
-});
-
-// 🔐 LOGIN
 client.login(process.env.TOKEN);

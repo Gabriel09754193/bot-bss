@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
+const { Client, GatewayIntentBits, Collection, Partials } = require("discord.js");
 const fs = require("fs");
 require("dotenv").config();
 
@@ -8,49 +8,26 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
+  partials: [Partials.Channel],
 });
 
 client.commands = new Collection();
 
-/* =====================================================
-   📂 CARREGAR COMANDOS (COM PROTEÇÃO)
-===================================================== */
-
+// 📂 CARREGAR COMANDOS
 const commandFiles = fs
   .readdirSync("./comandos")
   .filter((file) => file.endsWith(".js"));
 
 for (const file of commandFiles) {
-  try {
-    const command = require(`./comandos/${file}`);
-
-    if (!command.nome || typeof command.execute !== "function") {
-      console.log(
-        `⚠️ Comando ignorado (${file}) → estrutura inválida`
-      );
-      continue;
-    }
-
-    client.commands.set(command.nome, command);
-    console.log(`✅ Comando carregado: .${command.nome}`);
-  } catch (err) {
-    console.error(`❌ Erro ao carregar ${file}`);
-    console.error(err);
-  }
+  const command = require(`./comandos/${file}`);
+  client.commands.set(command.nome, command);
 }
-
-/* =====================================================
-   🤖 BOT ONLINE
-===================================================== */
 
 client.once("ready", () => {
   console.log(`🤖 Bot online como ${client.user.tag}`);
 });
 
-/* =====================================================
-   💬 ESCUTAR COMANDOS
-===================================================== */
-
+// 💬 COMANDOS COM PREFIXO .
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(".")) return;
@@ -59,14 +36,13 @@ client.on("messageCreate", async (message) => {
   const commandName = args.shift().toLowerCase();
 
   const command = client.commands.get(commandName);
-  if (!command) return; // não existe → ignora
+  if (!command) return;
 
   try {
-    await command.execute(client, message, args);
+    await command.execute(message, args, client);
   } catch (err) {
-    console.error(`❌ Erro no comando .${commandName}`);
     console.error(err);
-    message.reply("❌ Erro ao executar este comando.");
+    message.reply("❌ Erro ao executar o comando.");
   }
 });
 

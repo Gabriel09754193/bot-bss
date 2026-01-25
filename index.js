@@ -1,9 +1,13 @@
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
+const { 
+  Client, 
+  GatewayIntentBits, 
+  Collection, 
+  InteractionType 
+} = require("discord.js");
 const fs = require("fs");
-const mongoose = require("mongoose");
-require("dotenv").config(); // só funciona localmente, no Railway ele ignora
+require("dotenv").config();
 
-// 🔹 CLIENTE DO DISCORD
+// 🔹 CLIENTE
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -13,14 +17,6 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-
-// 🔹 CONEXÃO COM O MONGODB
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB conectado com sucesso"))
-  .catch((err) =>
-    console.error("❌ Erro ao conectar no MongoDB:", err)
-  );
 
 // 📂 CARREGAR COMANDOS
 const commandFiles = fs
@@ -32,12 +28,12 @@ for (const file of commandFiles) {
   client.commands.set(command.nome, command);
 }
 
-// 🔹 BOT ONLINE
+// 🤖 BOT ONLINE
 client.once("ready", () => {
   console.log(`🤖 Bot online como ${client.user.tag}`);
 });
 
-// 🔹 MENSAGENS
+// 💬 COMANDOS COM .
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(".")) return;
@@ -52,7 +48,28 @@ client.on("messageCreate", async (message) => {
     await command.execute(message, args);
   } catch (err) {
     console.error(err);
-    message.reply("❌ Ocorreu um erro ao executar o comando.");
+    message.reply("❌ Erro ao executar o comando.");
+  }
+});
+
+// 🔘 INTERAÇÕES (BOTÕES)
+client.on("interactionCreate", async (interaction) => {
+  if (interaction.type !== InteractionType.MessageComponent) return;
+
+  const [cmd, action, matchId] = interaction.customId.split(":");
+  if (cmd !== "pickban") return;
+
+  const command = client.commands.get("pickban");
+  if (!command || !command.handleButton) return;
+
+  try {
+    await command.handleButton(interaction, action, matchId);
+  } catch (err) {
+    console.error(err);
+    interaction.reply({ 
+      content: "❌ Erro ao processar a ação.", 
+      ephemeral: true 
+    });
   }
 });
 

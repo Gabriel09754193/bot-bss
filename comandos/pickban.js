@@ -1,30 +1,16 @@
 const {
-  ChannelType,
-  PermissionFlagsBits,
   EmbedBuilder,
+  PermissionsBitField,
+  ChannelType,
 } = require("discord.js");
 
-/* =====================================================
-   🔧 CONFIGURAÇÕES (MUDE APENAS AQUI)
-===================================================== */
-
+// ================= CONFIGURAÇÕES =================
 const CONFIG = {
-  // 📂 Categoria onde será criado o chat privado do pick/ban
-  PICKBAN_CATEGORY_ID: "1464644395960893440",
-
-  // 📣 Canal público onde o embed será enviado e editado
-  PUBLIC_CHANNEL_ID: "1464649761213780149",
-
-  // 📜 Canal de log administrativo (opcional)
-  ADMIN_LOG_CHANNEL_ID: "1464661705417167064",
-
-  // ⏱️ Tempo para cada ação (2 minutos)
-  ACTION_TIME: 120000,
+  STAFF_ROLE_ID: "1463257906546868463",
+  CATEGORY_PRIVATE_ID: "1464644395960893440",
+  PUBLIC_LOG_CHANNEL_ID: "1464649761213780149",
+  TIMEOUT_MS: 2 * 60 * 1000, // 2 minutos
 };
-
-/* =====================================================
-   🗺️ MAP POOL OFICIAL
-===================================================== */
 
 const MAP_POOL = [
   "Ancient",
@@ -36,253 +22,260 @@ const MAP_POOL = [
   "Overpass",
 ];
 
-/* =====================================================
-   📌 COMANDO
-===================================================== */
+// =================================================
+
+const activePickBans = new Map();
 
 module.exports = {
   nome: "pickban",
 
-  async execute(client, message, args) {
-    // 🔐 Apenas administradores
-    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return message.reply("❌ Apenas administradores podem usar este comando.");
+  async execute(message, args, client) {
+    // ====== VALIDAÇÕES ======
+    if (!message.member.roles.cache.has(CONFIG.STAFF_ROLE_ID)) {
+      return message.reply("❌ Apenas a administração pode iniciar o pick/ban.");
     }
 
     const iglA = message.mentions.users.at(0);
     const iglB = message.mentions.users.at(1);
 
     if (!iglA || !iglB) {
-      return message.reply("❌ Use: `.pickban @IGL_TimeA @IGL_TimeB`");
+      return message.reply("❌ Use: `.pickban @iglA @iglB`");
     }
 
-    /* =====================================================
-       🔒 CRIAR CANAL PRIVADO
-    ===================================================== */
-
-    const pickbanChannel = await message.guild.channels.create({
+    // ====== CRIAR CANAL PRIVADO ======
+    const channel = await message.guild.channels.create({
       name: `pickban-${iglA.username}-vs-${iglB.username}`,
       type: ChannelType.GuildText,
-      parent: CONFIG.PICKBAN_CATEGORY_ID,
+      parent: CONFIG.CATEGORY_PRIVATE_ID,
       permissionOverwrites: [
         {
-          id: message.guild.roles.everyone,
-          deny: [PermissionFlagsBits.ViewChannel],
+          id: message.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel],
         },
         {
           id: iglA.id,
           allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
           ],
         },
         {
           id: iglB.id,
           allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
           ],
         },
       ],
     });
 
-    /* =====================================================
-       🧠 ESTADO DO PICK/BAN
-    ===================================================== */
-
+    // ====== ESTADO ======
     const state = {
-      igls: { A: iglA, B: iglB },
-      bans: { A: [], B: [] },
-      picks: { A: null, B: null },
+      iglA,
+      iglB,
+      teamA: null,
+      teamB: null,
       availableMaps: [...MAP_POOL],
-      turn: Math.random() < 0.5 ? "A" : "B",
+      bans: [],
+      picks: [],
       decider: null,
+      turn: null,
+      step: 0,
+      publicMessage: null,
     };
 
-    /* =====================================================
-       📣 EMBED PÚBLICO (EDITÁVEL)
-    ===================================================== */
+    activePickBans.set(channel.id, state);
 
+    // ====== EMBED PÚBLICO ======
     const publicChannel = message.guild.channels.cache.get(
-      CONFIG.PUBLIC_CHANNEL_ID
+      CONFIG.PUBLIC_LOG_CHANNEL_ID
     );
 
     const publicEmbed = new EmbedBuilder()
-      .setTitle("🎮 Pick & Ban MD3 – Base Strike Series")
-      .setDescription(`**${iglA.username} 🆚 ${iglB.username}**`)
-      .setColor(0x8b0000)
-      .addFields(
-        { name: "❌ BANS", value: "—", inline: false },
-        { name: "🗺️ PICKS", value: "—", inline: false },
-        { name: "⚖️ DECIDER", value: "—", inline: false },
-        { name: "Status", value: "⏳ Em andamento", inline: false }
-      )
+      .setTitle("🎮 Pick & Ban MD3 — BSS")
+      .setDescription("Pick/Ban iniciado. Aguardando times...")
+      .setColor(0x1e1e2e)
       .setFooter({ text: "Base Strike Series • CS2" });
 
     const publicMsg = await publicChannel.send({ embeds: [publicEmbed] });
+    state.publicMessage = publicMsg;
 
-    /* =====================================================
-       🎲 INÍCIO
-    ===================================================== */
-
-    await pickbanChannel.send(
-      `🎮 **Pick/Ban MD3 iniciado**\n\nIGLs:\n• <@${iglA.id}>\n• <@${iglB.id}>\n\n🎲 **Sorteio:** <@${state.igls[state.turn].id}> começa BANINDO.`
+    // ====== INÍCIO ======
+    await channel.send(
+      `🔒 **Pick/Ban iniciado**\n${iglA} ${iglB}\n\n🏷️ **IGL ${iglA}, digite o nome do seu time:**`
     );
 
-    runBanPhase(pickbanChannel, publicMsg, state);
+    const collector = channel.createMessageCollector({
+      time: CONFIG.TIMEOUT_MS * 20,
+    });
+
+    collector.on("collect", async (msg) => {
+      if (![iglA.id, iglB.id].includes(msg.author.id)) return;
+
+      // ====== NOMES DOS TIMES ======
+      if (!state.teamA && msg.author.id === iglA.id) {
+        state.teamA = msg.content.trim();
+        await channel.send(
+          `✅ Time registrado: **${state.teamA}**\n\n🏷️ **IGL ${iglB}, digite o nome do seu time:**`
+        );
+        return updatePublicEmbed(state);
+      }
+
+      if (state.teamA && !state.teamB && msg.author.id === iglB.id) {
+        state.teamB = msg.content.trim();
+
+        // Sorteio de início
+        state.turn = Math.random() < 0.5 ? "A" : "B";
+
+        await channel.send(
+          `🎲 Sorteio realizado!\n👉 **${
+            state.turn === "A" ? state.teamA : state.teamB
+          }** começa banindo.\n\n🗺️ Mapas disponíveis:\n${state.availableMaps.join(
+            ", "
+          )}\n\n🚫 Digite o nome do mapa para **BANIR**`
+        );
+
+        return updatePublicEmbed(state);
+      }
+
+      // ====== BANS (4) ======
+      if (state.bans.length < 4) {
+        const map = normalizeMap(msg.content);
+        if (!state.availableMaps.includes(map)) return;
+
+        const team =
+          state.turn === "A" ? state.teamA : state.teamB;
+
+        state.bans.push({ team, map });
+        state.availableMaps = state.availableMaps.filter(
+          (m) => m !== map
+        );
+        state.turn = state.turn === "A" ? "B" : "A";
+
+        await channel.send(
+          `🚫 **${team}** baniu **${map}**\n\nMapas restantes:\n${state.availableMaps.join(
+            ", "
+          )}`
+        );
+
+        await updatePublicEmbed(state);
+
+        if (state.bans.length === 4) {
+          await channel.send(
+            `✅ Fase de **PICKS** iniciada.\n👉 **${
+              state.turn === "A" ? state.teamA : state.teamB
+            }**, escolha um mapa`
+          );
+        }
+        return;
+      }
+
+      // ====== PICKS (2) ======
+      if (state.picks.length < 2) {
+        const map = normalizeMap(msg.content);
+        if (!state.availableMaps.includes(map)) return;
+
+        const pickingTeam =
+          state.turn === "A" ? state.teamA : state.teamB;
+        const enemyTeam =
+          state.turn === "A" ? state.teamB : state.teamA;
+
+        state.picks.push({
+          team: pickingTeam,
+          map,
+          side: null,
+        });
+
+        state.availableMaps = state.availableMaps.filter(
+          (m) => m !== map
+        );
+
+        state.turn = state.turn === "A" ? "B" : "A";
+
+        await channel.send(
+          `✅ **${pickingTeam}** escolheu **${map}**\n🎯 **${enemyTeam}**, escolha o lado inicial (CT/TR)`
+        );
+
+        await updatePublicEmbed(state);
+        return;
+      }
+
+      // ====== LADOS DOS PICKS ======
+      const lastPick = state.picks.find((p) => !p.side);
+      if (lastPick) {
+        const side = msg.content.toUpperCase();
+        if (!["CT", "TR"].includes(side)) return;
+
+        lastPick.side = side;
+
+        await channel.send(
+          `🧭 Lado definido: **${side}** no mapa **${lastPick.map}**`
+        );
+
+        await updatePublicEmbed(state);
+
+        if (state.picks.every((p) => p.side)) {
+          // DECIDER
+          state.decider = state.availableMaps[0];
+          const randomSide = Math.random() < 0.5 ? "CT" : "TR";
+
+          await channel.send(
+            `⚔️ **Mapa decisivo:** **${state.decider}**\n🎲 Lado inicial sorteado: **${randomSide}**`
+          );
+
+          await updatePublicEmbed(state, true);
+          collector.stop();
+        }
+      }
+    });
   },
 };
 
-/* =====================================================
-   ❌ FASE DE BAN (4 BANS)
-===================================================== */
+// ================= FUNÇÕES =================
 
-async function runBanPhase(channel, publicMsg, state) {
-  for (let i = 0; i < 4; i++) {
-    const team = state.turn;
-    const igl = state.igls[team];
-
-    await channel.send(
-      `❌ **Vez de <@${igl.id}>**\nBanir mapa:\n${state.availableMaps.join(
-        ", "
-      )}\n⏱️ 2 minutos`
-    );
-
-    const map = await waitForMap(channel, igl.id, state.availableMaps);
-    state.bans[team].push(map);
-    state.availableMaps = state.availableMaps.filter((m) => m !== map);
-    state.turn = team === "A" ? "B" : "A";
-
-    await updatePublicEmbed(publicMsg, state);
-  }
-
-  runPickPhase(channel, publicMsg, state);
-}
-
-/* =====================================================
-   🗺️ FASE DE PICK (2 PICKS)
-===================================================== */
-
-async function runPickPhase(channel, publicMsg, state) {
-  for (let i = 0; i < 2; i++) {
-    const pickerTeam = state.turn;
-    const sideChooser = pickerTeam === "A" ? "B" : "A";
-
-    const picker = state.igls[pickerTeam];
-    const chooser = state.igls[sideChooser];
-
-    await channel.send(
-      `🗺️ **<@${picker.id}>**, escolha o mapa:\n${state.availableMaps.join(
-        ", "
-      )}`
-    );
-
-    const map = await waitForMap(channel, picker.id, state.availableMaps);
-    state.availableMaps = state.availableMaps.filter((m) => m !== map);
-
-    await channel.send(
-      `🔀 **<@${chooser.id}>**, escolha o lado inicial em **${map}** (CT/TR)`
-    );
-
-    const side = await waitForSide(channel, chooser.id);
-
-    state.picks[pickerTeam] = { map, side };
-    state.turn = sideChooser;
-
-    await updatePublicEmbed(publicMsg, state);
-  }
-
-  state.decider = state.availableMaps[0];
-  await updatePublicEmbed(publicMsg, state, true);
-
-  await channel.send(
-    `⚖️ **Mapa Decisivo:** ${state.decider}\n🎲 Lados sorteados automaticamente.\n✅ Pick/Ban finalizado.`
+function normalizeMap(input) {
+  return MAP_POOL.find(
+    (m) => m.toLowerCase() === input.toLowerCase()
   );
 }
 
-/* =====================================================
-   ⏱️ UTILITÁRIOS
-===================================================== */
+async function updatePublicEmbed(state, finished = false) {
+  const embed = new EmbedBuilder()
+    .setTitle("🎮 Pick & Ban MD3 — BSS")
+    .setColor(finished ? 0x2ecc71 : 0x3498db)
+    .addFields(
+      {
+        name: "🏷️ Times",
+        value:
+          state.teamA && state.teamB
+            ? `${state.teamA} vs ${state.teamB}`
+            : "Aguardando...",
+      },
+      {
+        name: "🚫 Bans",
+        value:
+          state.bans.length > 0
+            ? state.bans.map((b) => `• ${b.team}: ${b.map}`).join("\n")
+            : "—",
+      },
+      {
+        name: "✅ Picks",
+        value:
+          state.picks.length > 0
+            ? state.picks
+                .map(
+                  (p) =>
+                    `• ${p.team}: ${p.map} (${p.side || "lado pendente"})`
+                )
+                .join("\n")
+            : "—",
+      },
+      {
+        name: "⚔️ Decider",
+        value: state.decider || "—",
+      }
+    )
+    .setFooter({ text: "Base Strike Series • CS2" });
 
-function waitForMap(channel, userId, validMaps) {
-  return new Promise((resolve) => {
-    const collector = channel.createMessageCollector({
-      time: CONFIG.ACTION_TIME,
-      filter: (m) =>
-        m.author.id === userId &&
-        validMaps.map((v) => v.toLowerCase()).includes(m.content.toLowerCase()),
-    });
-
-    collector.on("collect", (m) => {
-      collector.stop();
-      resolve(
-        validMaps.find(
-          (v) => v.toLowerCase() === m.content.toLowerCase()
-        )
-      );
-    });
-
-    collector.on("end", (c) => {
-      if (c.size === 0) resolve(validMaps[0]);
-    });
-  });
-}
-
-function waitForSide(channel, userId) {
-  return new Promise((resolve) => {
-    const collector = channel.createMessageCollector({
-      time: CONFIG.ACTION_TIME,
-      filter: (m) =>
-        m.author.id === userId &&
-        ["CT", "TR"].includes(m.content.toUpperCase()),
-    });
-
-    collector.on("collect", (m) => {
-      collector.stop();
-      resolve(m.content.toUpperCase());
-    });
-
-    collector.on("end", (c) => {
-      if (c.size === 0) resolve("CT");
-    });
-  });
-}
-
-/* =====================================================
-   📣 UPDATE EMBED PÚBLICO
-===================================================== */
-
-async function updatePublicEmbed(msg, state, finished = false) {
-  const embed = EmbedBuilder.from(msg.embeds[0]);
-  embed.spliceFields(0, embed.data.fields.length);
-
-  embed.addFields(
-    {
-      name: "❌ BANS",
-      value: `Time A: ${state.bans.A.join(", ") || "—"}\nTime B: ${
-        state.bans.B.join(", ") || "—"
-      }`,
-    },
-    {
-      name: "🗺️ PICKS",
-      value:
-        Object.entries(state.picks)
-          .filter(([, v]) => v)
-          .map(
-            ([k, v]) =>
-              `${k === "A" ? "Time A" : "Time B"}: ${v.map} (${v.side})`
-          )
-          .join("\n") || "—",
-    },
-    {
-      name: "⚖️ DECIDER",
-      value: state.decider || "—",
-    },
-    {
-      name: "Status",
-      value: finished ? "🏁 Finalizado" : "⏳ Em andamento",
-    }
-  );
-
-  await msg.edit({ embeds: [embed] });
-            }
+  await state.publicMessage.edit({ embeds: [embed] });
+      }

@@ -1,32 +1,24 @@
-const {
-  ChannelType,
-  PermissionsBitField
-} = require("discord.js");
-
-const CATEGORY_ID = "1466237511658377236";
+const { PermissionsBitField } = require("discord.js");
 
 module.exports = {
-  name: "formartime",
+  nome: "formartime",
 
-  async execute(client, message, args) {
-    // teste de vida
-    console.log("COMANDO FORMARTIME EXECUTADO");
+  async execute(message, args, client) {
+    // TESTE DE VIDA
+    console.log("FORMARTIME EXECUTADO");
 
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply("❌ Apenas administradores podem usar este comando.");
     }
 
-    const players = message.mentions.members;
-
-    if (players.size < 1) {
-      return message.reply("⚠️ O comando respondeu. Agora mencione players.");
+    if (message.mentions.members.size === 0) {
+      return message.reply(
+        "✅ **COMANDO FUNCIONANDO!**\n" +
+        "Agora mencione os players.\n" +
+        "Exemplo:\n`.formartime @player1 @player2`"
+      );
     }
 
-    const categoria = message.guild.channels.cache.get(CATEGORY_ID);
-    if (!categoria) {
-      return message.reply("❌ Categoria não encontrada.");
-    }
-
-    await message.reply("✅ COMANDO FUNCIONANDO. Próximo passo: criar canal.");
+    return message.reply("🔥 Funcionou. Próximo passo: criar canal e botões.");
   }
 };

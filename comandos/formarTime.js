@@ -14,36 +14,31 @@ module.exports = {
 
   async execute(message, args, client) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply("❌ Apenas administradores podem usar este comando.");
+      return;
     }
 
     const membros = message.mentions.members;
-
     if (membros.size < 2) {
-      return message.reply(
-        "❌ Mencione **pelo menos 2 players** para formar um time."
-      );
+      return message.reply("❌ Mencione os players para iniciar a formação.");
     }
 
     await message.delete().catch(() => {});
 
-    // 🧠 Nome automático do time (opção 2)
-    const teamName = `time-${Date.now().toString().slice(-4)}`;
+    // 📣 Aviso público
+    message.channel.send(
+      `🛠️ **FORMAÇÃO DE EQUIPE INICIADA**\n` +
+      `👑 Administrador ${message.author} iniciou a formação de uma equipe.\n` +
+      `👥 Players estão em **processo de desenvolvimento do time**.\n\n` +
+      `⏳ Em breve novidades no **#sem-time**.`
+    );
 
-    // 📁 Criar canal privado
     const canal = await message.guild.channels.create({
-      name: teamName,
+      name: `formacao-time`,
       type: ChannelType.GuildText,
       parent: CATEGORY_ID,
       permissionOverwrites: [
-        {
-          id: message.guild.id,
-          deny: ["ViewChannel"]
-        },
-        {
-          id: message.author.id,
-          allow: ["ViewChannel", "SendMessages"]
-        },
+        { id: message.guild.id, deny: ["ViewChannel"] },
+        { id: message.author.id, allow: ["ViewChannel", "SendMessages"] },
         ...membros.map(m => ({
           id: m.id,
           allow: ["ViewChannel", "SendMessages"]
@@ -51,64 +46,57 @@ module.exports = {
       ]
     });
 
-    // 🎯 BOTÕES (ADMIN ONLY)
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("cancelar_time")
+        .setCustomId("cancelar")
         .setLabel("❌ Cancelar formação")
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId("confirmar_time")
+        .setCustomId("confirmar")
         .setLabel("✅ Time formado")
         .setStyle(ButtonStyle.Success)
     );
 
-    const msgPrivada = await canal.send({
+    const msg = await canal.send({
       content:
-        `🔥 **Formação de time iniciada!**\n\n` +
-        `👥 **Players selecionados:**\n` +
-        membros.map(m => `• ${m}`).join("\n") +
-        `\n\n🛡️ **Apenas administradores podem confirmar ou cancelar.**`,
+        `🔥 **BEM-VINDOS À FORMAÇÃO DE EQUIPE – BSS**\n\n` +
+        `Este canal existe para criar um **TIME DE VERDADE**.\n\n` +
+        `🎯 Não é só para jogar a liga.\n` +
+        `👉 É para treinar, evoluir, criar comunicação e união.\n\n` +
+        `📢 **Obrigatório:** definir meio de comunicação e jogar juntos.\n` +
+        `⏳ Este chat ficará aberto por alguns dias.\n\n` +
+        `🛡️ Quando estiver tudo certo, um **ADMIN** deve confirmar.`,
       components: [row]
     });
 
-    // 📣 Mensagem no chat público (#sem-time)
-    const semTimeChannel = message.guild.channels.cache.get(SEM_TIME_CHANNEL_ID);
-    if (semTimeChannel) {
-      semTimeChannel.send(
-        `✅ **Um novo time foi formado com jogadores que estavam sem equipe!**\n\n` +
-        `📌 Quer montar o seu também?\n` +
-        `Use o modelo abaixo neste canal:\n\n` +
-        `Nick:\nFunção:\nLink perfil Steam:`
-      );
-    }
+    const collector = msg.createMessageComponentCollector({ time: 1000 * 60 * 60 });
 
-    // 🎮 COLLECTOR DOS BOTÕES
-    const collector = msgPrivada.createMessageComponentCollector({
-      time: 1000 * 60 * 30
-    });
-
-    collector.on("collect", async (interaction) => {
-      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({
-          content: "❌ Apenas administradores podem usar esses botões.",
-          ephemeral: true
-        });
+    collector.on("collect", async (i) => {
+      if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return i.reply({ content: "❌ Apenas administradores.", ephemeral: true });
       }
 
-      if (interaction.customId === "cancelar_time") {
-        await canal.send("❌ **Formação de time cancelada por um administrador.**");
+      if (i.customId === "cancelar") {
+        const ch = message.guild.channels.cache.get(SEM_TIME_CHANNEL_ID);
+        if (ch) {
+          ch.send(
+            `❌ **FORMAÇÃO DE EQUIPE CANCELADA**\n\n` +
+            `Players continuam livres para novas formações.\n\n` +
+            `Modelo:\nNick:\nFunção:\nLink perfil Steam:`
+          );
+        }
         await canal.delete();
       }
 
-      if (interaction.customId === "confirmar_time") {
-        await interaction.update({
-          content:
-            `✅ **TIME FORMADO COM SUCESSO!**\n\n` +
-            `🏷️ Nome do time: **${teamName}**\n` +
-            `👥 Players:\n${membros.map(m => `• ${m}`).join("\n")}`,
-          components: []
-        });
+      if (i.customId === "confirmar") {
+        await canal.send(
+          `📝 **CONFIRMAÇÃO FINAL**\n\n` +
+          `Administrador, responda neste formato:\n\n` +
+          `Nome do Time:\n` +
+          `Player 1 – Nick:\nPlayer 2 – Nick:\nPlayer 3 – Nick:\nPlayer 4 – Nick:\nPlayer 5 – Nick:`
+        );
+
+        collector.stop();
       }
     });
   }

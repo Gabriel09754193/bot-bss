@@ -1,225 +1,148 @@
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelType,
-  PermissionsBitField,
-} = require("discord.js");
-
-const CONFIG = {
-  partidasEmEspera: "1463270089376927845",
-  pickbanPublico: "1464649761213780149",
-  amistosos: "1466989903232499712",
-  categoriaMatch: "1463562210591637605",
-};
-
-const MAP_POOL_BASE = [
-  "Mirage",
-  "Inferno",
-  "Nuke",
-  "Overpass",
-  "Ancient",
-  "Anubis",
-  "Dust2",
-];
+const { MessageEmbed, MessageActionRow, MessageButton, PermissionsBitField } = require("discord.js");
 
 module.exports = {
   nome: "match",
-
+  descricao: "Criar partida com chat privado, Pick/Ban completo e amistoso BSS",
   async execute(message, args, client) {
-    const guild = message.guild;
-    const canalEspera = guild.channels.cache.get(CONFIG.partidasEmEspera);
-    if (!canalEspera)
-      return message.reply("❌ Canal de partidas em espera não encontrado.");
+    if (!message.member.roles.cache.some(r => r.name.toLowerCase().includes("igl"))) {
+      return message.reply("❌ Apenas IGLs podem executar este comando!");
+    }
 
-    const iglA = message.author;
+    const ID_CATEGORIA_MATCH = "1463562210591637605";
+    const ID_PARTIDAS_ESPERA = "1463270089376927845";
+    const ID_PICKBAN = "1464649761213780149";
+    const ID_AMISTOSOS = "1466989903232499712";
+    const ID_RESULTADOS = "1463260797604987014";
 
-    // ===== PERGUNTAR NOME DO TIME A =====
-    await message.reply("🛡️ **BSS** | Digite o **nome completo do seu time**:");
+    const filter = m => m.author.id === message.author.id;
 
-    const filterA = (m) => m.author.id === iglA.id;
-    const coletorA = await message.channel.awaitMessages({
-      filter: filterA,
-      max: 1,
-      time: 60000,
-    });
+    try {
+      // 1️⃣ Pergunta Time A
+      await message.reply("📝 Qual o **nome do seu time (Time A)**?");
+      const collectedTimeA = await message.channel.awaitMessages({ filter, max: 1, time: 60000, errors: ["time"] });
+      const nomeTimeA = collectedTimeA.first().content;
 
-    if (!coletorA.size)
-      return message.reply("❌ Tempo esgotado. Use `.match` novamente.");
+      // 2️⃣ Pergunta Time B
+      await message.reply("📝 Qual o **nome do time adversário (Time B)**?");
+      const collectedTimeB = await message.channel.awaitMessages({ filter, max: 1, time: 60000, errors: ["time"] });
+      const nomeTimeB = collectedTimeB.first().content;
 
-    const timeA = coletorA.first().content;
+      // 3️⃣ Pergunta formato
+      await message.reply("🎮 Qual o **formato da partida**? (MD1/MD3)");
+      const collectedFormato = await message.channel.awaitMessages({ filter, max: 1, time: 60000, errors: ["time"] });
+      const formato = collectedFormato.first().content.toUpperCase();
 
-    // ===== SOLICITAÇÃO EM PARTIDAS EM ESPERA =====
-    const embedSolicitacao = new EmbedBuilder()
-      .setTitle("⚔️ Base Strikes Series | Partida em Espera")
-      .setDescription("Um time está buscando confronto!")
-      .addFields(
-        { name: "🛡️ Time", value: timeA, inline: true },
-        { name: "👑 IGL", value: `${iglA}`, inline: true },
-        { name: "⏳ Status", value: "Aguardando aceite", inline: true }
-      )
-      .setColor(0xff0000)
-      .setFooter({ text: "BSS • Sistema de Matches" });
-
-    const rowAceite = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("aceitar_match")
-        .setLabel("⚔️ Aceitar Partida")
-        .setStyle(ButtonStyle.Success)
-    );
-
-    const msgSolicitacao = await canalEspera.send({
-      embeds: [embedSolicitacao],
-      components: [rowAceite],
-    });
-
-    // ===== COLLECTOR ACEITE =====
-    const collectorAceite = msgSolicitacao.createMessageComponentCollector();
-
-    collectorAceite.on("collect", async (interaction) => {
-      if (interaction.user.id === iglA.id)
-        return interaction.reply({
-          content: "❌ Você não pode aceitar sua própria partida.",
-          ephemeral: true,
-        });
-
-      const iglB = interaction.user;
-
-      // ===== PERGUNTAR TIME B NO CHAT =====
-      await interaction.reply({
-        content: `🛡️ **BSS** | ${iglB}, digite o **nome completo do seu time** no chat para confirmar a partida:`,
-        ephemeral: false,
-      });
-
-      const filterB = (m) => m.author.id === iglB.id;
-      const coletorB = await canalEspera.awaitMessages({
-        filter: filterB,
-        max: 1,
-        time: 60000,
-      });
-
-      if (!coletorB.size)
-        return canalEspera.send(
-          "❌ Tempo esgotado para informar o nome do time."
-        );
-
-      const timeB = coletorB.first().content;
-
-      collectorAceite.stop();
-      await msgSolicitacao.edit({ components: [] });
-
-      // ===== CRIAR CHAT PRIVADO =====
-      const matchChannel = await guild.channels.create({
-        name: `match-${timeA}-vs-${timeB}`.toLowerCase().replace(/ /g, "-"),
-        type: ChannelType.GuildText,
-        parent: CONFIG.categoriaMatch || null,
+      // Criação do chat privado
+      const guild = message.guild;
+      const canalPrivado = await guild.channels.create(`match-${nomeTimeA}-vs-${nomeTimeB}`, {
+        type: 0,
+        parent: ID_CATEGORIA_MATCH || null,
         permissionOverwrites: [
-          {
-            id: guild.id,
-            deny: [PermissionsBitField.Flags.ViewChannel],
-          },
-          {
-            id: iglA.id,
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages,
-            ],
-          },
-          {
-            id: iglB.id,
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages,
-            ],
-          },
+          { id: message.author.id, allow: ["ViewChannel", "SendMessages"] },
+          { id: guild.roles.everyone.id, deny: ["ViewChannel"] },
         ],
       });
 
-      await canalEspera.send(
-        `✅ **Match criada:** ${timeA} 🆚 ${timeB}`
+      // Embed do chat privado
+      const embedPrivado = new MessageEmbed()
+        .setTitle("📢 BSS | Chat Privado de Partida")
+        .setDescription(`Bem-vindos ao chat privado da partida!\n\n👑 **IGL Time A:** ${message.author}\n🎯 **Time A:** ${nomeTimeA}\n⚔️ **Time B:** ${nomeTimeB}\n🗓️ **Formato:** ${formato}\n\n📌 **Objetivo:**\n• Combinarem horários\n• Treinar e organizar a partida\n• Executar Pick/Ban quando ADM autorizar\n• O chat ficará disponível por dias para organização`)
+        .setColor("ORANGE")
+        .setFooter({ text: "Base Strikes Series • Sistema de Matches" })
+        .setTimestamp();
+
+      const rowButtons = new MessageActionRow().addComponents(
+        new MessageButton()
+          .setCustomId("iniciar_pickban")
+          .setLabel("🎲 Iniciar Pick/Ban (ADM)")
+          .setStyle("PRIMARY"),
+        new MessageButton()
+          .setCustomId("inserir_resultado")
+          .setLabel("🏁 Inserir Resultado (ADM)")
+          .setStyle("SUCCESS"),
+        new MessageButton()
+          .setCustomId("cancelar_partida")
+          .setLabel("❌ Cancelar Partida (ADM)")
+          .setStyle("DANGER")
       );
 
-      await matchChannel.send({
-        content: `📢 **BSS** | Bem-vindos ao chat da partida!\n\n` +
-          `Aqui vocês vão realizar **Pick/Ban** do confronto.\n` +
-          `O bot vai guiar passo a passo e orientar quem deve agir.\n` +
-          `Somente o IGL da vez poderá clicar nos botões.\n` +
-          `Lembrem-se: treinar juntos, criar comunicação e jogar como um time de verdade!`,
-      });
+      await canalPrivado.send({ embeds: [embedPrivado], components: [rowButtons] });
 
-      // ===== PICK/BAN =====
-      let mapPool = [...MAP_POOL_BASE];
-      let bans = [];
-      let picks = [];
-      let turno = Math.random() < 0.5 ? "A" : "B";
+      // Embed público na partida em espera
+      const embedPublico = new MessageEmbed()
+        .setDescription(`🔥 **Solicitação de partida criada!**\n👑 **IGL Time A:** ${message.author}\n🎯 **Time A:** ${nomeTimeA}\n⚔️ **Time B:** ${nomeTimeB}\n🗓️ **Formato:** ${formato}\n⏳ Aguardando organização e confirmação da partida.`)
+        .setColor("BLUE")
+        .setFooter({ text: "Base Strikes Series • Sistema de Matches" })
+        .setTimestamp();
 
-      const embedPB = new EmbedBuilder()
-        .setTitle("🗺️ BSS | Pick & Ban")
-        .setDescription(
-          `🔴 **${timeA}** vs 🔵 **${timeB}**\n\n` +
-            `❌ Bans: ${bans.join(", ") || "Nenhum"}\n` +
-            `🎯 Picks: ${picks.join(", ") || "Nenhum"}\n` +
-            `⏳ Vez do: ${turno === "A" ? timeA : timeB}`
-        )
-        .setColor(0xff0000);
+      const canalEspera = guild.channels.cache.get(ID_PARTIDAS_ESPERA);
+      if (canalEspera) canalEspera.send({ embeds: [embedPublico] });
 
-      const gerarBotoes = () => {
-        return new ActionRowBuilder().addComponents(
-          mapPool.map((map) =>
-            new ButtonBuilder()
-              .setCustomId(`ban_${map}`)
-              .setLabel(map)
-              .setStyle(ButtonStyle.Danger)
-          )
-        );
-      };
+      // Coletor de botões no chat privado
+      const collector = canalPrivado.createMessageComponentCollector({ componentType: "BUTTON", time: 0 });
 
-      const msgPB = await matchChannel.send({
-        embeds: [embedPB],
-        components: [gerarBotoes()],
-      });
+      let pickbanAtivo = false;
+      let turnoIGL = null;
+      let mapasDisponiveis = ["Mirage","Dust2","Inferno","Anubis","Overpass"];
+      let mapasBanidos = [];
+      let mapasPickados = [];
+      let sides = {};
 
-      const pbCollector = msgPB.createMessageComponentCollector();
-
-      pbCollector.on("collect", async (btn) => {
-        const autor = btn.user.id === iglA.id ? "A" : btn.user.id === iglB.id ? "B" : null;
-        if (!autor || autor !== turno)
-          return btn.reply({ content: "❌ Não é sua vez.", ephemeral: true });
-
-        const mapa = btn.customId.replace("ban_", "");
-        mapPool = mapPool.filter((m) => m !== mapa);
-        bans.push(mapa);
-
-        await guild.channels.cache
-          .get(CONFIG.pickbanPublico)
-          .send(`❌ **${autor === "A" ? timeA : timeB}** baniu **${mapa}**`);
-
-        turno = turno === "A" ? "B" : "A";
-
-        // Atualiza embed
-        embedPB.setDescription(
-          `🔴 **${timeA}** vs 🔵 **${timeB}**\n\n` +
-            `❌ Bans: ${bans.join(", ")}\n` +
-            `🎯 Picks: ${picks.join(", ") || "Nenhum"}\n` +
-            `⏳ Vez do: ${turno === "A" ? timeA : timeB}`
-        );
-
-        if (mapPool.length === 1) {
-          pbCollector.stop();
-          await msgPB.edit({ components: [] });
-          await matchChannel.send(`🎯 **Mapa final definido:** **${mapPool[0]}**`);
-          await guild.channels.cache
-            .get(CONFIG.amistosos)
-            .send(
-              `⚔️ **PARTIDA CONFIRMADA — BSS**\n\n${timeA} 🆚 ${timeB}\n🗺️ Mapa final: **${mapPool[0]}**`
-            );
-          return;
+      collector.on("collect", async i => {
+        if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+          return i.reply({ content: "❌ Apenas ADM pode usar esses botões!", ephemeral: true });
         }
 
-        await msgPB.edit({ embeds: [embedPB], components: [gerarBotoes()] });
-        btn.deferUpdate();
+        // CANCELAR PARTIDA
+        if (i.customId === "cancelar_partida") {
+          await canalPrivado.delete().catch(console.error);
+          return i.reply({ content: "❌ Partida cancelada pelo ADM!", ephemeral: true });
+        }
+
+        // INICIAR PICK/BAN
+        if (i.customId === "iniciar_pickban") {
+          pickbanAtivo = true;
+          turnoIGL = message.author.id; // ADM define turno inicial, guia IGLs
+
+          const embedPickBan = new MessageEmbed()
+            .setTitle("🎲 Pick/Ban | BSS")
+            .setDescription(`O ADM iniciou o **Pick/Ban** da partida!\n\n👑 **IGL Time A:** ${message.author}\n🎯 **Time A:** ${nomeTimeA}\n⚔️ **Time B:** ${nomeTimeB}\n🗓️ **Formato:** ${formato}\n\n📌 Mapas disponíveis: ${mapasDisponiveis.join(", ")}\n\n⚠️ Apenas o IGL no turno poderá executar os bans/picks.\nUse os comandos:\n• .ban [mapa]\n• .pick [mapa]\n• .side [CT/TR] para mapa decisivo.`)
+            .setColor("GREEN")
+            .setFooter({ text: "Base Strikes Series • Pick/Ban" })
+            .setTimestamp();
+
+          return i.reply({ embeds: [embedPickBan] });
+        }
+
+        // INSERIR RESULTADO (só para ADM)
+        if (i.customId === "inserir_resultado") {
+          const embedResultado = new MessageEmbed()
+            .setTitle("🏁 Inserir Resultado | BSS")
+            .setDescription(`O ADM poderá registrar o resultado da partida no canal <#${ID_RESULTADOS}>`)
+            .setColor("YELLOW")
+            .setFooter({ text: "Base Strikes Series • Sistema de Matches" })
+            .setTimestamp();
+
+          return i.reply({ embeds: [embedResultado], ephemeral: true });
+        }
       });
-    });
+
+      // Função para enviar amistoso
+      const enviarAmistoso = async () => {
+        const embedAmistoso = new MessageEmbed()
+          .setTitle("⚔️ Amistoso BSS")
+          .setDescription(`**Time A:** ${nomeTimeA}\n**Time B:** ${nomeTimeB}\n**Formato:** ${formato}\n**Mapas selecionados:** ${mapasPickados.join(", ")}\n\n🗓️ Combinar horário e jogar a partida!`)
+          .setColor("PURPLE")
+          .setFooter({ text: "Base Strikes Series • Amistoso" })
+          .setTimestamp();
+
+        const canalAmistoso = guild.channels.cache.get(ID_AMISTOSOS);
+        if (canalAmistoso) canalAmistoso.send({ embeds: [embedAmistoso] });
+      };
+
+    } catch (err) {
+      console.error(err);
+      message.reply("❌ Tempo esgotado ou erro ao coletar informações. Tente novamente!");
+    }
   },
 };

@@ -116,42 +116,23 @@ module.exports = {
       const coletorBotao = msg.createMessageComponentCollector();
 
       coletorBotao.on("collect", async (interaction) => {
+        if (interaction.customId !== "bss_match_aceitar") return;
         await interaction.deferReply({ ephemeral: true });
 
         const iglB = interaction.user;
 
-        /* =========================
-           CRIAR CHAT PRIVADO
-        ========================= */
         const canalPrivado = await interaction.guild.channels.create({
           name: `match-${nomeTimeA}-vs-${iglB.username}`,
           type: ChannelType.GuildText,
           parent: IDS.CATEGORIA_MATCH,
           permissionOverwrites: [
-            {
-              id: interaction.guild.id,
-              deny: [PermissionsBitField.Flags.ViewChannel],
-            },
-            {
-              id: iglA.id,
-              allow: [
-                PermissionsBitField.Flags.ViewChannel,
-                PermissionsBitField.Flags.SendMessages,
-              ],
-            },
-            {
-              id: iglB.id,
-              allow: [
-                PermissionsBitField.Flags.ViewChannel,
-                PermissionsBitField.Flags.SendMessages,
-              ],
-            },
+            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+            { id: iglA.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+            { id: iglB.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
           ],
         });
 
-        await canalPrivado.send(
-          `🛡️ <@${iglB.id}>, **qual o nome da sua equipe?**`
-        );
+        await canalPrivado.send(`🛡️ <@${iglB.id}>, **qual o nome da sua equipe?**`);
 
         const coletorTimeB = canalPrivado.createMessageCollector({
           filter: (m) => m.author.id === iglB.id,
@@ -165,27 +146,18 @@ module.exports = {
           const embedPrivado = new EmbedBuilder()
             .setColor("#1e90ff")
             .setTitle("🤝 BSS | Amistoso Privado")
-            .setDescription(
-              "Chat destinado à **marcação da partida**.\n\n" +
-              "⚠️ **Pick/Ban apenas por ADMIN**"
-            )
+            .setDescription("Chat destinado à **marcação da partida**.\n\n⚠️ **Pick/Ban apenas por ADMIN**")
             .addFields(
               { name: "🛡️ Time A", value: nomeTimeA, inline: true },
               { name: "🛡️ Time B", value: nomeTimeB, inline: true },
-              { name: "🎮 IGL A", value: `<@${iglA.id}>` },
-              { name: "🎮 IGL B", value: `<@${iglB.id}>` },
+              { name: "🎮 IGL A", value: `<@${iglA.id}>`, inline: true },
+              { name: "🎮 IGL B", value: `<@${iglB.id}>`, inline: true },
               { name: "📋 Formato", value: "MD3" }
             );
 
           const botoes = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId("bss_pickban_start")
-              .setLabel("Iniciar Pick/Ban")
-              .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-              .setCustomId("bss_match_cancelar")
-              .setLabel("Cancelar Match")
-              .setStyle(ButtonStyle.Danger)
+            new ButtonBuilder().setCustomId("bss_pickban_start").setLabel("Iniciar Pick/Ban").setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId("bss_match_cancelar").setLabel("Cancelar Match").setStyle(ButtonStyle.Danger)
           );
 
           await canalPrivado.send({
@@ -194,9 +166,7 @@ module.exports = {
             components: [botoes],
           });
 
-          await interaction.editReply({
-            content: "✅ Match aceito e chat criado.",
-          });
+          await interaction.editReply({ content: "✅ Match aceito e chat criado." });
         });
       });
     });
@@ -204,113 +174,102 @@ module.exports = {
 };
 
 /* =========================
-   PICK / BAN MD3 BOTÕES
+   LÓGICA DO PICK / BAN
 ========================= */
 module.exports.setupPickBan = (client) => {
   client.on("interactionCreate", async (interaction) => {
     if (!interaction.isButton()) return;
 
+    // --- INICIAR ---
     if (interaction.customId === "bss_pickban_start") {
-      if (
-        !interaction.member.permissions.has(
-          PermissionsBitField.Flags.Administrator
-        )
-      ) {
-        return interaction.reply({
-          content: "❌ Apenas admin pode iniciar.",
-          ephemeral: true,
-        });
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: "❌ Apenas admin pode iniciar.", ephemeral: true });
       }
 
-      const channel = interaction.channel;
-      const members = channel.members.filter((m) => !m.user.bot);
+      const embed = interaction.message.embeds[0];
+      const iglA = embed.fields.find(f => f.name.includes("IGL A")).value.replace(/[<@!>]/g, "");
+      const iglB = embed.fields.find(f => f.name.includes("IGL B")).value.replace(/[<@!>]/g, "");
 
-      const [iglA, iglB] = members.map((m) => m.id);
-      const first = Math.random() < 0.5 ? iglA : iglB;
+      const primeiro = Math.random() < 0.5 ? iglA : iglB;
 
-      activePickBans.set(channel.id, {
-        turno: first,
-        bans: [],
-        picks: [],
+      activePickBans.set(interaction.channel.id, {
+        iglA, iglB,
+        turno: primeiro,
+        bans: [], picks: [],
         pool: [...MAP_POOL],
       });
 
-      await interaction.reply({
-        content: "🎲 **Pick/Ban iniciado!**",
-        ephemeral: true,
-      });
-
-      sendMapButtons(channel, first, "BAN", [...MAP_POOL]);
+      await interaction.reply({ content: "🎲 Pick/Ban iniciado!", ephemeral: true });
+      return sendMapButtons(interaction.channel, activePickBans.get(interaction.channel.id));
     }
 
+    // --- BOTÕES DE MAPA ---
     if (interaction.customId.startsWith("pb_")) {
       const state = activePickBans.get(interaction.channel.id);
       if (!state) return;
 
       if (interaction.user.id !== state.turno) {
-        return interaction.reply({ content: "❌ Não é sua vez.", ephemeral: true });
+        return interaction.reply({ content: `❌ Não é sua vez! Vez de <@${state.turno}>`, ephemeral: true });
       }
 
       const mapa = interaction.customId.replace("pb_", "");
-      state.pool = state.pool.filter((m) => m !== mapa);
+      state.pool = state.pool.filter(m => m !== mapa);
 
-      if (state.bans.length < 4) {
-        state.bans.push(mapa);
-      } else {
-        state.picks.push(mapa);
-      }
+      const fase = state.bans.length < 4 ? "BAN" : "PICK";
+      if (fase === "BAN") state.bans.push(mapa);
+      else state.picks.push(mapa);
 
-      state.turno =
-        state.turno === interaction.channel.members.first().id
-          ? interaction.channel.members.last().id
-          : interaction.channel.members.first().id;
+      state.turno = state.turno === state.iglA ? state.iglB : state.iglA;
 
       await interaction.deferUpdate();
 
       if (state.bans.length < 4 || state.picks.length < 2) {
-        return sendMapButtons(
-          interaction.channel,
-          state.turno,
-          state.bans.length < 4 ? "BAN" : "PICK",
-          state.pool
-        );
+        return sendMapButtons(interaction.channel, state);
       }
 
+      // --- FINALIZAR ---
       const decisivo = state.pool[0];
+      const ladoSorteado = Math.random() < 0.5 ? "CT" : "TR";
+      const quemEscolheLado = state.turno; // Quem não pickou o último mapa costuma escolher o lado do decisivo
 
       const canalPB = await interaction.client.channels.fetch(IDS.PICKBAN);
+      const embedFinal = new EmbedBuilder()
+        .setColor("#5865F2")
+        .setTitle("🗺️ Pick/Ban Finalizado (MD3)")
+        .addFields(
+          { name: "❌ Bans", value: state.bans.join("\n"), inline: true },
+          { name: "✅ Picks", value: state.picks.join("\n"), inline: true },
+          { name: "🎯 Decisivo", value: `${decisivo}\n(Sorteio Lado: <@${quemEscolheLado}> começa de **${ladoSorteado}**)`, inline: false }
+        );
 
-      await canalPB.send({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("🗺️ Pick/Ban Finalizado (MD3)")
-            .addFields(
-              { name: "❌ Bans", value: state.bans.join(", ") },
-              { name: "✅ Picks", value: state.picks.join(", ") },
-              { name: "🎯 Decisivo", value: decisivo }
-            ),
-        ],
-      });
-
+      await interaction.channel.send({ embeds: [embedFinal] });
+      await canalPB.send({ embeds: [embedFinal] });
       activePickBans.delete(interaction.channel.id);
     }
   });
 };
 
-function sendMapButtons(channel, turno, fase, mapas) {
-  const row = new ActionRowBuilder();
+function sendMapButtons(channel, state) {
+  const fase = state.bans.length < 4 ? "BAN" : "PICK";
+  const rows = [];
+  let currentRow = new ActionRowBuilder();
 
-  mapas.forEach((m) => {
-    row.addComponents(
+  state.pool.forEach((mapa, index) => {
+    if (index > 0 && index % 4 === 0) {
+      rows.push(currentRow);
+      currentRow = new ActionRowBuilder();
+    }
+    currentRow.addComponents(
       new ButtonBuilder()
-        .setCustomId(`pb_${m}`)
-        .setLabel(m)
-        .setStyle(ButtonStyle.Secondary)
+        .setCustomId(`pb_${mapa}`)
+        .setLabel(`${fase === "BAN" ? "❌" : "✅"} ${mapa}`)
+        .setStyle(fase === "BAN" ? ButtonStyle.Danger : ButtonStyle.Success)
     );
   });
+  rows.push(currentRow);
 
   channel.send({
-    content: `🎮 Vez de <@${turno}> — **${fase}**`,
-    components: [row],
+    content: `🎮 Vez de <@${state.turno}> — Escolha um mapa para **${fase}**`,
+    components: rows,
   });
-          }
+      }

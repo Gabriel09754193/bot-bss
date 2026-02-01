@@ -9,9 +9,6 @@ const {
   TextInputStyle,
 } = require("discord.js");
 
-/* =========================
-   CONFIGURAÇÕES FIXAS (BSS)
-========================= */
 const IDS = {
   PARTIDAS_EM_ESPERA: "1463270089376927845",
   PICKBAN: "1464649761213780149",
@@ -25,28 +22,19 @@ const activePickBans = new Map();
 
 module.exports = {
   nome: "match",
-
   async execute(message, args, client) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-
-    // Limpeza automática do comando
+    
     setTimeout(() => message.delete().catch(() => {}), 1000);
-
-    const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Disponibilidade da equipe?**"];
+    const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Qual a disponibilidade?**"];
     let respostas = [];
     let msgsColeta = [];
-
-    const instrucao = await message.channel.send("⚔️ **BSS | Configurando Amistoso...**");
-    msgsColeta.push(instrucao);
-
-    const coletor = message.channel.createMessageCollector({ 
-      filter: (m) => m.author.id === message.author.id, 
-      max: 2, time: 60000 
-    });
 
     const q1 = await message.channel.send(perguntas[0]);
     msgsColeta.push(q1);
 
+    const coletor = message.channel.createMessageCollector({ filter: (m) => m.author.id === message.author.id, max: 2 });
+    
     coletor.on("collect", async (m) => {
       respostas.push(m.content);
       msgsColeta.push(m);
@@ -57,124 +45,196 @@ module.exports = {
     });
 
     coletor.on("end", async () => {
-      // Limpa o chat #matchs
       msgsColeta.forEach(msg => msg.delete().catch(() => {}));
-
       if (respostas.length < 2) return;
 
-      const [nomeA, disp] = respostas;
       const canalEspera = await client.channels.fetch(IDS.PARTIDAS_EM_ESPERA);
-
       const embed = new EmbedBuilder()
         .setColor("#FF8C00")
         .setTitle("🔥 BSS | Amistoso Disponível")
         .addFields(
-          { name: "🛡️ Time", value: `**${nomeA}**`, inline: true },
-          { name: "🎮 IGL", value: `<@${message.author.id}>`, inline: true },
-          { name: "📅 Disponibilidade", value: `\`${disp}\`` }
+          { name: "🛡️ Time", value: respostas[0], inline: true },
+          { name: "📅 Disponibilidade", value: respostas[1], inline: true }
         )
-        .setFooter({ text: `ID:${message.author.id} | Status: Pendente` });
+        .setFooter({ text: `IGL_ID:${message.author.id}` }); // ID guardado aqui
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("bss_match_aceitar").setLabel("Aceitar Match").setStyle(ButtonStyle.Success)
       );
-
       await canalEspera.send({ embeds: [embed], components: [row] });
     });
   },
 };
 
-/* =========================
-   SISTEMA DE INTERAÇÕES
-========================= */
 module.exports.setupPickBan = (client) => {
   client.on("interactionCreate", async (interaction) => {
-    
-    if (interaction.isButton()) {
-      const state = activePickBans.get(interaction.channel.id);
+    if (!interaction.isButton() && !interaction.isModalSubmit()) return;
 
-      // --- ACEITAR MATCH ---
-      if (interaction.customId === "bss_match_aceitar") {
-        const embedOriginal = interaction.message.embeds[0];
-        const iglAId = embedOriginal.footer.text.split("ID:")[1].split(" |")[0];
-        const nomeA = embedOriginal.fields[0].value.replace(/\*/g, "");
+    // --- 1. ACEITAR MATCH ---
+    if (interaction.customId === "bss_match_aceitar") {
+      const embedOriginal = interaction.message.embeds[0];
+      const iglAId = embedOriginal.footer.text.replace("IGL_ID:", "");
+      const nomeA = embedOriginal.fields[0].value;
 
-        if (interaction.user.id === iglAId) return interaction.reply({ content: "❌ Você não pode aceitar seu próprio jogo.", ephemeral: true });
+      if (interaction.user.id === iglAId) return interaction.reply({ content: "❌ Você não pode aceitar seu próprio jogo.", ephemeral: true });
 
-        // Atualiza chat de espera
-        const embedAceito = EmbedBuilder.from(embedOriginal)
-          .setColor("#555555")
-          .setTitle("✅ BSS | Amistoso em Andamento")
-          .addFields({ name: "⚔️ Adversário", value: `<@${interaction.user.id}>` })
-          .setFooter({ text: `Partida sendo combinada no privado.` });
+      const canal = await interaction.guild.channels.create({
+        name: `match-${nomeA}`,
+        parent: IDS.CATEGORIA_MATCH,
+        permissionOverwrites: [
+          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: iglAId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+        ],
+      });
 
-        await interaction.update({ embeds: [embedAceito], components: [] });
+      await interaction.update({ content: "✅ Partida aceita! Chat privado criado.", embeds: [], components: [] });
 
-        // Criar canal privado
-        const canal = await interaction.guild.channels.create({
-          name: `match-${nomeA}`,
-          parent: IDS.CATEGORIA_MATCH,
-          permissionOverwrites: [
-            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-            { id: iglAId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-            { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-          ],
-        });
+      const ask = await canal.send(`🛡️ <@${interaction.user.id}>, **qual o nome da sua equipe?**`);
+      const col = canal.createMessageCollector({ filter: (m) => m.author.id === interaction.user.id, max: 1 });
+      
+      col.on("collect", async (m) => {
+        const nomeB = m.content;
+        m.delete().catch(() => {}); ask.delete().catch(() => {});
 
-        const askTimeB = await canal.send(`🛡️ <@${interaction.user.id}>, **qual o nome da sua equipe?**`);
-        const col = canal.createMessageCollector({ filter: (m) => m.author.id === interaction.user.id, max: 1 });
-        
-        col.on("collect", async (m) => {
-          const nomeB = m.content;
-          m.delete().catch(() => {});
-          askTimeB.delete().catch(() => {});
-
-          const embedBoasVindas = new EmbedBuilder()
-            .setColor("#1E90FF")
-            .setTitle("🤝 BSS | Amistoso Confirmado")
-            .setDescription("Este chat é destinado para a **marcação de horário** e alinhamento com a staff.\n\n⚠️ **Os botões abaixo são de uso exclusivo da ADMINISTRAÇÃO.**")
-            .addFields(
-              { name: "🛡️ Time A", value: nomeA, inline: true }, { name: "🛡️ Time B", value: nomeB, inline: true },
-              { name: "🎮 IGL A", value: `<@${iglAId}>`, inline: true }, { name: "🎮 IGL B", value: `<@${interaction.user.id}>`, inline: true }
-            );
-
-          const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId("pb_start").setLabel("[Admin] Iniciar Pick/Ban").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId("match_result").setLabel("[Admin] Resultado").setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId("match_cancel").setLabel("[Admin] Cancelar").setStyle(ButtonStyle.Danger)
+        const embedPrivado = new EmbedBuilder()
+          .setTitle("🤝 BSS | Match Privada")
+          .setColor("#1E90FF")
+          .setDescription("Usem este espaço para combinar. O Pick/Ban é iniciado por um **Staff**.")
+          .addFields(
+            { name: "Time A", value: nomeA, inline: true },
+            { name: "Time B", value: nomeB, inline: true },
+            { name: "ID_A", value: iglAId, inline: true },
+            { name: "ID_B", value: interaction.user.id, inline: true }
           );
-          await canal.send({ embeds: [embedBoasVindas], components: [row] });
-        });
-      }
 
-      // --- INICIAR PICK/BAN (ADMIN) ---
-      if (interaction.customId === "pb_start") {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: "❌ Apenas Administradores podem acionar o Pick/Ban.", ephemeral: true });
-        }
-        
-        const embedOriginal = interaction.message.embeds[0];
-        const stateData = {
-          iglA: embedOriginal.fields[2].value.match(/\d+/)[0],
-          iglB: embedOriginal.fields[3].value.match(/\d+/)[0],
-          timeA: embedOriginal.fields[0].value,
-          timeB: embedOriginal.fields[1].value,
-          bans: [], picks: [], pool: [...MAP_POOL], logs: [], statusLado: false
-        };
-        stateData.turno = Math.random() < 0.5 ? stateData.iglA : stateData.iglB;
-        activePickBans.set(interaction.channel.id, stateData);
-        
-        // Mantém os botões de Resultado/Cancelar, mas remove o de Iniciar Pick/Ban
-        const rowAtualizada = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId("match_result").setLabel("[Admin] Resultado").setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId("match_cancel").setLabel("[Admin] Cancelar").setStyle(ButtonStyle.Danger)
+        const rowAdmin = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("pb_start").setLabel("[Staff] Iniciar Pick/Ban").setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId("match_result").setLabel("[Staff] Resultado").setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId("match_cancel").setLabel("[Staff] Cancelar").setStyle(ButtonStyle.Danger)
         );
-        
-        await interaction.update({ components: [rowAtualizada] });
-        refreshPB(interaction.channel, stateData);
-      }
+        await canal.send({ embeds: [embedPrivado], components: [rowAdmin] });
+      });
+    }
 
-      // ... Restante da lógica de Lados, Veto e Modal Resultado ...
+    // --- 2. INICIAR PICK/BAN (ADMIN) ---
+    if (interaction.customId === "pb_start") {
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: "❌ Apenas Staff.", ephemeral: true });
+
+      const emb = interaction.message.embeds[0];
+      const stateData = {
+        timeA: emb.fields[0].value,
+        timeB: emb.fields[1].value,
+        iglA: emb.fields[2].value,
+        iglB: emb.fields[3].value,
+        bans: [], picks: [], pool: [...MAP_POOL], logs: [], statusLado: false
+      };
+      
+      stateData.turno = Math.random() < 0.5 ? stateData.iglA : stateData.iglB;
+      activePickBans.set(interaction.channel.id, stateData);
+
+      // Atualiza os botões (remove o de Iniciar)
+      const newRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("match_result").setLabel("[Staff] Resultado").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("match_cancel").setLabel("[Staff] Cancelar").setStyle(ButtonStyle.Danger)
+      );
+
+      await interaction.update({ components: [newRow] });
+      return refreshPB(interaction.channel, stateData);
+    }
+
+    // --- 3. LÓGICA DE TURNOS (PICK/BAN/SIDE) ---
+    const state = activePickBans.get(interaction.channel.id);
+    if (!state) return;
+
+    if (interaction.customId.startsWith("side_")) {
+      if (interaction.user.id !== state.turno) return interaction.reply({ content: "Não é sua vez!", ephemeral: true });
+      const lado = interaction.customId.split("_")[1];
+      state.logs.push(`➡️ <@${interaction.user.id}>: **${lado}** em **${state.picks[state.picks.length-1]}**`);
+      state.statusLado = false;
+      state.turno = (state.turno === state.iglA) ? state.iglB : state.iglA;
+      await interaction.deferUpdate();
+      return checkFinish(interaction, state);
+    }
+
+    if (interaction.customId.startsWith("pb_")) {
+      if (interaction.user.id !== state.turno || state.statusLado) return interaction.reply({ content: "Aguarde sua vez!", ephemeral: true });
+      const mapa = interaction.customId.replace("pb_", "");
+      state.pool = state.pool.filter(m => m !== mapa);
+
+      if (state.bans.length < 4) {
+        state.bans.push(mapa);
+        state.logs.push(`❌ <@${interaction.user.id}> baniu **${mapa}**`);
+        state.turno = (state.turno === state.iglA) ? state.iglB : state.iglA;
+      } else {
+        state.picks.push(mapa);
+        state.logs.push(`✅ <@${interaction.user.id}> pickou **${mapa}**`);
+        state.statusLado = true;
+        state.turno = (state.turno === state.iglA) ? state.iglB : state.iglA;
+      }
+      await interaction.deferUpdate();
+      return checkFinish(interaction, state);
+    }
+
+    // MODAL RESULTADO (Continua igual)
+    if (interaction.customId === "match_result") {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+        const modal = new ModalBuilder().setCustomId("modal_resultado").setTitle("Resultado BSS");
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("res_vencedor").setLabel("VENCEDOR").setStyle(TextInputStyle.Short)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("res_placar").setLabel("PLACAR MAPAS").setStyle(TextInputStyle.Paragraph)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("res_stats").setLabel("STATS GERAIS").setStyle(TextInputStyle.Short)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("res_mvp").setLabel("MVP").setStyle(TextInputStyle.Short))
+        );
+        return await interaction.showModal(modal);
     }
   });
 };
+
+async function checkFinish(channelOrInteraction, state) {
+  const channel = channelOrInteraction.channel || channelOrInteraction;
+  if (!state.statusLado && state.bans.length === 4 && state.picks.length === 2) {
+    const decisivo = state.pool[0];
+    const ladoAuto = Math.random() < 0.5 ? "CT" : "TR";
+    
+    const embedFinal = new EmbedBuilder()
+        .setTitle("🗺️ Pick/Ban Finalizado")
+        .setColor("#5865F2")
+        .addFields(
+            { name: "Time A", value: state.timeA, inline: true },
+            { name: "Time B", value: state.timeB, inline: true },
+            { name: "Mapas Escolhidos", value: `1. ${state.picks[0]}\n2. ${state.picks[1]}\n3. ${decisivo} (Decisivo)` },
+            { name: "Sorteio Decisivo", value: `O IGL <@${state.turno}> começa de **${ladoAuto}** no mapa final.` }
+        );
+
+    await channel.send({ embeds: [embedFinal] });
+    activePickBans.delete(channel.id);
+  } else {
+    refreshPB(channel, state);
+  }
+}
+
+function refreshPB(channel, state) {
+  const fase = state.statusLado ? "ESCOLHER LADO" : (state.bans.length < 4 ? "BANIR" : "PICKAR");
+  const embed = new EmbedBuilder()
+    .setTitle("🗺️ Painel Pick/Ban")
+    .setColor(fase === "BANIR" ? "#FF4B4B" : "#4BFF4B")
+    .setDescription(`Vez de: <@${state.turno}>\nAção: **${fase}**`)
+    .addFields({ name: "📜 Histórico", value: state.logs.length > 0 ? state.logs.join("\n") : "Aguardando..." });
+
+  const rows = [];
+  if (state.statusLado) {
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("side_CT").setLabel("Começar de CT").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("side_TR").setLabel("Começar de TR").setStyle(ButtonStyle.Primary)
+    ));
+  } else {
+    let row = new ActionRowBuilder();
+    state.pool.forEach((m, i) => {
+      if (i > 0 && i % 4 === 0) { rows.push(row); row = new ActionRowBuilder(); }
+      row.addComponents(new ButtonBuilder().setCustomId(`pb_${m}`).setLabel(m).setStyle(state.bans.length < 4 ? ButtonStyle.Danger : ButtonStyle.Success));
+    });
+    rows.push(row);
+  }
+  channel.send({ embeds: [embed], components: rows });
+}

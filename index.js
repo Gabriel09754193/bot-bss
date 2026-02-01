@@ -21,6 +21,11 @@ const commandFiles = fs
 for (const file of commandFiles) {
   const command = require(`./comandos/${file}`);
   client.commands.set(command.nome, command);
+  
+  // --- ADIÇÃO PARA O PICKBAN ---
+  // Se o comando tiver a função de setup, nós a ativamos aqui
+  if (command.setupPickBan) command.setupPickBan(client);
+  // -----------------------------
 }
 
 client.once("ready", () => {
@@ -54,6 +59,7 @@ client.on("interactionCreate", async (interaction) => {
 
   // BOTÃO: ACEITAR AMISTOSO
   if (interaction.customId === "bss_accept_match") {
+    // ... Seu código de aceitar match continua aqui igual ...
     const embedOriginal = interaction.message.embeds[0];
     if (!embedOriginal) {
       return interaction.reply({
@@ -70,7 +76,6 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // ❌ Impedir aceitar própria partida
     if (interaction.user.id === iglAId) {
       return interaction.reply({
         content: "❌ Você não pode aceitar a própria partida.",
@@ -80,52 +85,26 @@ client.on("interactionCreate", async (interaction) => {
 
     const guild = interaction.guild;
 
-    // 🏷️ Criar chat privado (sem categoria)
     const channel = await guild.channels.create({
       name: `bss-match-${interaction.user.username}`,
-      type: 0, // GUILD_TEXT
+      type: 0,
       permissionOverwrites: [
-        {
-          id: guild.roles.everyone.id,
-          deny: ["ViewChannel"],
-        },
-        {
-          id: iglAId,
-          allow: ["ViewChannel", "SendMessages"],
-        },
-        {
-          id: interaction.user.id,
-          allow: ["ViewChannel", "SendMessages"],
-        },
-        {
-          id: client.user.id,
-          allow: ["ViewChannel", "SendMessages"],
-        },
+        { id: guild.roles.everyone.id, deny: ["ViewChannel"] },
+        { id: iglAId, allow: ["ViewChannel", "SendMessages"] },
+        { id: interaction.user.id, allow: ["ViewChannel", "SendMessages"] },
+        { id: client.user.id, allow: ["ViewChannel", "SendMessages"] },
       ],
     });
 
-    await interaction.reply({
-      content: "✅ Partida aceita! Chat criado.",
-      ephemeral: true,
-    });
+    await interaction.reply({ content: "✅ Partida aceita! Chat criado.", ephemeral: true });
 
     channel.send({
       embeds: [
         {
           color: 0x0d0d0d,
           title: "🔥 Base Strikes Series | Amistoso Criado",
-          description:
-            "Bem-vindos ao chat da partida!\n\n" +
-            "🟢 **IGL A:** <@" +
-            iglAId +
-            ">\n" +
-            "🔵 **IGL B:** <@" +
-            interaction.user.id +
-            ">\n\n" +
-            "📌 Em breve iniciaremos o **Pick/Ban de mapas**.",
-          footer: {
-            text: "Base Strikes Series • BSS",
-          },
+          description: "Bem-vindos ao chat da partida!\n\n🟢 **IGL A:** <@" + iglAId + ">\n🔵 **IGL B:** <@" + interaction.user.id + ">\n\n📌 Em breve iniciaremos o **Pick/Ban de mapas**.",
+          footer: { text: "Base Strikes Series • BSS" },
         },
       ],
     });

@@ -1,21 +1,8 @@
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  PermissionsBitField,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-} = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require("discord.js");
 
-/* =========================
-   CONFIGURAÇÕES FIXAS (BSS)
-========================= */
+// Mantenha seus IDs aqui
 const IDS = {
   PARTIDAS_EM_ESPERA: "1463270089376927845",
-  PICKBAN: "1464649761213780149",
-  RESULTADOS: "1463260797604987014",
   AMISTOSOS: "1466989903232499712",
   CATEGORIA_MATCH: "1463562210591637605",
 };
@@ -25,51 +12,37 @@ const activePickBans = new Map();
 
 module.exports = {
   nome: "match",
-
   async execute(message, args, client) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-
+    
+    // Deleta o comando do admin para não poluir
     setTimeout(() => message.delete().catch(() => {}), 1000);
 
-    const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Disponibilidade da equipe?**"];
+    const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Qual a disponibilidade?**"];
     let respostas = [];
-    let mensagensParaApagar = [];
+    
+    const filter = m => m.author.id === message.author.id;
+    const coletor = message.channel.createMessageCollector({ filter, max: 2, time: 60000 });
 
-    const msgBoasVindas = await message.channel.send("⚔️ **BSS | Iniciando Solicitação de Amistoso (MD3)...**");
-    mensagensParaApagar.push(msgBoasVindas);
+    const msgStatus = await message.channel.send(perguntas[0]);
 
-    const coletor = message.channel.createMessageCollector({ 
-      filter: (m) => m.author.id === message.author.id, 
-      max: 2,
-      time: 60000 
-    });
-
-    const perguntaInicial = await message.channel.send(perguntas[0]);
-    mensagensParaApagar.push(perguntaInicial);
-
-    coletor.on("collect", async (m) => {
+    coletor.on('collect', m => {
       respostas.push(m.content);
-      mensagensParaApagar.push(m);
-      if (respostas.length < 2) {
-        const prox = await message.channel.send(perguntas[respostas.length]);
-        mensagensParaApagar.push(prox);
-      }
+      m.delete().catch(() => {});
+      if (respostas.length < 2) msgStatus.edit(perguntas[1]);
     });
 
-    coletor.on("end", async () => {
-      mensagensParaApagar.forEach(msg => msg.delete().catch(() => {}));
-
+    coletor.on('end', async () => {
+      msgStatus.delete().catch(() => {});
       if (respostas.length < 2) return;
 
-      const [nomeA, disp] = respostas;
       const canalEspera = await client.channels.fetch(IDS.PARTIDAS_EM_ESPERA);
-
       const embed = new EmbedBuilder()
         .setColor("#FF8C00")
         .setTitle("🔥 BSS | Amistoso Disponível")
         .addFields(
-          { name: "🛡️ Time", value: `**${nomeA}**`, inline: true },
-          { name: "📅 Disponibilidade", value: `\`${disp}\``, inline: true }
+          { name: "🛡️ Time", value: respostas[0], inline: true },
+          { name: "📅 Disponibilidade", value: respostas[1], inline: true }
         )
         .setFooter({ text: `ID:${message.author.id} | Pendente` });
 
@@ -82,18 +55,15 @@ module.exports = {
   },
 };
 
-/* =========================
-   FUNÇÕES DE APOIO (LÓGICA)
-========================= */
-
+// --- FUNÇÃO PARA ATUALIZAR O PAINEL DE PICK/BAN ---
 async function refreshPB(channel, state) {
-  const fase = state.statusLado ? "ESCOLHER LADO" : (state.bans.length < 4 ? "BANIR MAPA" : "PICKAR MAPA");
+  const fase = state.statusLado ? "ESCOLHER LADO" : (state.bans.length < 4 ? "BANIR" : "PICKAR");
   
   const embed = new EmbedBuilder()
-    .setTitle("🗺️ Painel de Pick/Ban BSS")
-    .setColor(state.statusLado ? "#FEE75C" : (state.bans.length < 4 ? "#ED4245" : "#57F287"))
-    .setDescription(`👤 **Vez de:** <@${state.turno}>\n🎯 **Ação:** \`${fase}\``)
-    .addFields({ name: "📜 Histórico", value: state.logs.length > 0 ? state.logs.join("\n") : "_Aguardando..._" });
+    .setTitle("🗺️ Painel Pick/Ban BSS")
+    .setColor(state.statusLado ? "#FEE75C" : "#57F287")
+    .setDescription(`👤 Vez de: <@${state.turno}>\n🎯 Ação: **${fase}**`)
+    .addFields({ name: "📜 Histórico", value: state.logs.join("\n") || "Aguardando..." });
 
   const rows = [];
   if (state.statusLado) {
@@ -110,6 +80,7 @@ async function refreshPB(channel, state) {
     rows.push(row);
   }
 
+  // Edita a mensagem se ela existir, se não, envia nova
   if (state.lastMsgId) {
     const msg = await channel.messages.fetch(state.lastMsgId).catch(() => null);
     if (msg) return msg.edit({ embeds: [embed], components: rows });
@@ -118,30 +89,8 @@ async function refreshPB(channel, state) {
   state.lastMsgId = sent.id;
 }
 
-async function checkFinish(interaction, state, client) {
-  if (!state.statusLado && state.bans.length === 4 && state.picks.length === 2) {
-    const decisivo = state.pool[0];
-    
-    const embedFinal = new EmbedBuilder()
-      .setColor("#5865F2")
-      .setTitle("🏁 Pick/Ban Finalizado")
-      .addFields(
-        { name: "✅ Mapas", value: `1. ${state.picks[0]}\n2. ${state.picks[1]}\n3. ${decisivo} (Decisivo)` }
-      );
-
-    await interaction.channel.send({ content: "🏆 **Confronto definido!**", embeds: [embedFinal] });
-    
-    const amiChan = await client.channels.fetch(IDS.AMISTOSOS);
-    amiChan.send({ content: `🔥 **Novo Match:** ${state.timeA} vs ${state.timeB}`, embeds: [embedFinal] });
-
-    activePickBans.delete(interaction.channel.id);
-  } else {
-    await refreshPB(interaction.channel, state);
-  }
-}
-
+// Exportando para o index.js
 module.exports.activePickBans = activePickBans;
 module.exports.refreshPB = refreshPB;
-module.exports.checkFinish = checkFinish;
 module.exports.IDS = IDS;
 module.exports.MAP_POOL = MAP_POOL;

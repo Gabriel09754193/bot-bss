@@ -4,6 +4,9 @@ const {
   ButtonBuilder,
   ButtonStyle,
   PermissionsBitField,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } = require("discord.js");
 
 /* =========================

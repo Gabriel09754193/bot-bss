@@ -1,0 +1,84 @@
+const IDS = {
+  PARTIDAS_EM_ESPERA: "1463270089376927845",
+  PICKBAN: "1464649761213780149", // Canal onde os logs de Pick/Ban aparecem
+  RESULTADOS: "1463260797604987014", // Canal de resultados gerais
+  AMISTOSOS: "1466989903232499712",
+  CATEGORIA_MATCH: "1463562210591637605",
+  CARGO_IGL: "1463258074310508765", // Seu cargo de IGL
+};
+
+client.on("interactionCreate", async (interaction) => {
+    // Busca o estado da partida no Map global (activePickBans deve estar definido fora do evento)
+    const state = activePickBans.get(interaction.channel.id);
+
+    // --- 1. LÓGICA DE BOTÕES ---
+    if (interaction.isButton()) {
+        
+        // Bloqueio de Segurança: Apenas Administradores para controles críticos
+        const botoesAdmin = ["pb_start", "match_result", "match_cancel"];
+        if (botoesAdmin.includes(interaction.customId)) {
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return interaction.reply({ content: "🚫 **Acesso Negado:** Apenas Administradores podem usar estes botões.", ephemeral: true });
+            }
+        }
+
+        // BOTÃO DE RESULTADO: Abre o Modal Premium corrigido
+        if (interaction.customId === "match_result") {
+            const modal = new ModalBuilder()
+                .setCustomId("modal_bss_final")
+                .setTitle("🏆 Relatório Premium BSS");
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("venc").setLabel("EQUIPE VENCEDORA").setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("perd").setLabel("EQUIPE PERDEDORA").setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("plac").setLabel("PLACAR (EX: MIRAGE 13-05)").setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("mvp").setLabel("MVP DA PARTIDA").setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("extra").setLabel("LINK DA PRINT / DATA").setStyle(TextInputStyle.Short).setRequired(false))
+            );
+
+            return await interaction.showModal(modal);
+        }
+
+        // CANCELAR PARTIDA
+        if (interaction.customId === "match_cancel") {
+            await interaction.reply("⚠️ Deletando canal em 5 segundos...");
+            return setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+        }
+
+        // LÓGICA DE PICKS E LADOS (Turnos)
+        // (Aqui o seu código de pb_ e side_ deve continuar chamando o checkFinish)
+    }
+
+    // --- 2. LÓGICA DO MODAL (SUBMIT) ---
+    if (interaction.isModalSubmit() && interaction.customId === "modal_bss_final") {
+        const v = interaction.fields.getTextInputValue("venc");
+        const p = interaction.fields.getTextInputValue("perd");
+        const pl = interaction.fields.getTextInputValue("plac");
+        const mvp = interaction.fields.getTextInputValue("mvp");
+        const ex = interaction.fields.getTextInputValue("extra") || "N/A";
+
+        const embedRes = new EmbedBuilder()
+            .setColor("#00FF00")
+            .setTitle("🏆 BSS | RESULTADO DO CONFRONTO")
+            .setDescription(`A equipe **${v}** venceu a partida contra **${p}**!`)
+            .addFields(
+                { name: "📍 Placar por Mapas", value: `\`\`\`arm\n${pl}\n\`\`\`` }, // Placar bonitão
+                { name: "🌟 MVP da Partida", value: `> ${mvp}`, inline: true },
+                { name: "📅 Informações Extras", value: `> ${ex}`, inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: "Liga Base Strike Series" });
+
+        try {
+            // Envia para o canal de RESULTADOS GERAIS
+            const canalRes = await interaction.client.channels.fetch(IDS.RESULTADOS);
+            if (canalRes) await canalRes.send({ embeds: [embedRes] });
+
+            await interaction.reply("✅ Resultado enviado com sucesso! O canal será fechado.");
+            return setTimeout(() => interaction.channel.delete().catch(() => {}), 10000);
+        } catch (err) {
+            console.error("Erro ao enviar resultado:", err);
+            return interaction.reply({ content: "❌ Erro ao enviar resultado para o canal. Verifique as permissões do bot.", ephemeral: true });
+        }
+    }
+});

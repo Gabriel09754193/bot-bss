@@ -1,4 +1,16 @@
-const { Client, GatewayIntentBits, Collection, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
+const { 
+    Client, 
+    GatewayIntentBits, 
+    Collection, 
+    Partials, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    ModalBuilder, 
+    TextInputBuilder, 
+    TextInputStyle 
+} = require("discord.js");
 const fs = require("fs");
 require("dotenv").config();
 
@@ -21,8 +33,6 @@ const commandFiles = fs
 for (const file of commandFiles) {
   const command = require(`./comandos/${file}`);
   client.commands.set(command.nome, command);
-  
-  // --- ADIÇÃO PARA O PICKBAN ---
   if (command.setupPickBan) command.setupPickBan(client);
 }
 
@@ -57,7 +67,7 @@ client.on("interactionCreate", async (interaction) => {
   // --- PARTE 1: CLIQUE EM BOTÕES ---
   if (interaction.isButton()) {
 
-    // BOTÃO: ACEITAR AMISTOSO (Seu código original preservado)
+    // ⚔️ BOTÃO: ACEITAR AMISTOSO
     if (interaction.customId === "bss_accept_match") {
       const embedOriginal = interaction.message.embeds[0];
       if (!embedOriginal) return interaction.reply({ content: "❌ Erro ao identificar a partida.", ephemeral: true });
@@ -68,7 +78,7 @@ client.on("interactionCreate", async (interaction) => {
 
       const guild = interaction.guild;
       const channel = await guild.channels.create({
-        name: `bss-match-${interaction.user.username}`,
+        name: `⚔️┃match-${interaction.user.username}`,
         type: 0,
         permissionOverwrites: [
           { id: guild.roles.everyone.id, deny: ["ViewChannel"] },
@@ -80,25 +90,38 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.reply({ content: "✅ Partida aceita! Chat criado.", ephemeral: true });
 
+      // BOTÕES DE CONTROLE PARA O CANAL PRIVADO
+      const rowControle = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("pb_start").setLabel("INICIAR PICK/BAN").setStyle(ButtonStyle.Primary).setEmoji("🗺️"),
+        new ButtonBuilder().setCustomId("match_result").setLabel("RESULTADO").setStyle(ButtonStyle.Success).setEmoji("🏆"),
+        new ButtonBuilder().setCustomId("match_cancel").setLabel("CANCELAR").setStyle(ButtonStyle.Danger).setEmoji("✖️")
+      );
+
       channel.send({
+        content: `🔔 <@${iglAId}> & <@${interaction.user.id}>`,
         embeds: [{
-          color: 0x0d0d0d,
-          title: "🔥 Base Strikes Series | Amistoso Criado",
-          description: "Bem-vindos ao chat da partida!\n\n🟢 **IGL A:** <@" + iglAId + ">\n🔵 **IGL B:** <@" + interaction.user.id + ">\n\n📌 Em breve iniciaremos o **Pick/Ban de mapas**.",
-          footer: { text: "Base Strikes Series • BSS" },
+          color: 0x0099ff,
+          title: "🤝 BSS | AMISTOSO CONFIRMADO",
+          description: "Bem-vindos ao chat da partida!\n\n❗ **AVISO:** Os botões abaixo são para uso da **Administração**. IGLs devem aguardar o início dos vetos.",
+          fields: [
+            { name: "🏠 Time A", value: `<@${iglAId}>`, inline: true },
+            { name: "🚀 Time B", value: `<@${interaction.user.id}>`, inline: true }
+          ],
+          footer: { text: "Base Strikes Series • Botões Permanentes" },
         }],
+        components: [rowControle]
       });
     }
 
-    // BOTÃO: ABRIR MODAL DE RESULTADO (Apenas Admins)
+    // 🏆 BOTÃO: RESULTADO (ABRE O FORMULÁRIO)
     if (interaction.customId === "match_result") {
       if (!interaction.member.permissions.has("Administrator")) {
-        return interaction.reply({ content: "🚫 **Acesso Negado:** Apenas Administradores da BSS podem usar este botão.", ephemeral: true });
+        return interaction.reply({ content: "🚫 Apenas Administradores podem registrar resultados.", ephemeral: true });
       }
 
       const modal = new ModalBuilder()
         .setCustomId("modal_bss_final")
-        .setTitle("🏆 Relatório Premium BSS");
+        .setTitle("🏆 Relatório de Partida BSS");
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("venc").setLabel("EQUIPE VENCEDORA").setStyle(TextInputStyle.Short).setRequired(true)),
@@ -111,17 +134,17 @@ client.on("interactionCreate", async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // BOTÃO: CANCELAR PARTIDA (Apenas Admins)
+    // ✖️ BOTÃO: CANCELAR
     if (interaction.customId === "match_cancel") {
       if (!interaction.member.permissions.has("Administrator")) {
-        return interaction.reply({ content: "🚫 **Acesso Negado:** Apenas Administradores podem cancelar.", ephemeral: true });
+        return interaction.reply({ content: "🚫 Apenas Administradores podem cancelar.", ephemeral: true });
       }
-      await interaction.reply("⚠️ Cancelando partida... O canal será deletado em 5 segundos.");
+      await interaction.reply("⚠️ Deletando canal em 5 segundos...");
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
   }
 
-  // --- PARTE 2: ENVIO DO MODAL (SUBMIT) ---
+  // --- PARTE 2: ENVIO DO FORMULÁRIO (MODAL SUBMIT) ---
   if (interaction.isModalSubmit() && interaction.customId === "modal_bss_final") {
     const v = interaction.fields.getTextInputValue("venc");
     const p = interaction.fields.getTextInputValue("perd");
@@ -137,7 +160,7 @@ client.on("interactionCreate", async (interaction) => {
       .setDescription(`A equipe **${v}** garantiu a vitória contra **${p}**!`)
       .addFields(
         { name: "📍 Placar por Mapas", value: `\`\`\`arm\n${pl}\n\`\`\`` },
-        { name: "🌟 MVP e Estatísticas", value: `> ${mvp}`, inline: true },
+        { name: "🌟 MVP da Partida", value: `> ${mvp}`, inline: true },
         { name: "📅 Info Extra / Link", value: `> ${ex}`, inline: true }
       )
       .setTimestamp()
@@ -146,12 +169,10 @@ client.on("interactionCreate", async (interaction) => {
     try {
       const canalRes = await interaction.client.channels.fetch(ID_RESULTADOS);
       if (canalRes) await canalRes.send({ embeds: [embedRes] });
-      
-      await interaction.reply("✅ Resultado enviado com sucesso! Deletando este canal em 10 segundos.");
+      await interaction.reply("✅ Resultado enviado! Deletando canal em 10 segundos.");
       setTimeout(() => interaction.channel.delete().catch(() => {}), 10000);
     } catch (err) {
-      console.error("Erro ao enviar resultado:", err);
-      await interaction.reply({ content: "❌ Erro ao enviar para o canal de resultados. Verifique os IDs.", ephemeral: true });
+      await interaction.reply({ content: "❌ Erro ao enviar resultado.", ephemeral: true });
     }
   }
 });

@@ -29,7 +29,6 @@ module.exports = {
   async execute(message, args, client) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
-    // Limpeza automática do canal #matchs
     setTimeout(() => message.delete().catch(() => {}), 1000);
 
     const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Disponibilidade da equipe?**"];
@@ -58,7 +57,6 @@ module.exports = {
     });
 
     coletor.on("end", async () => {
-      // Limpa o chat #matchs
       mensagensParaApagar.forEach(msg => msg.delete().catch(() => {}));
 
       if (respostas.length < 2) return;
@@ -88,7 +86,6 @@ module.exports = {
    FUNÇÕES DE APOIO (LÓGICA)
 ========================= */
 
-// Função que atualiza o painel de Pick/Ban no chat
 async function refreshPB(channel, state) {
   const fase = state.statusLado ? "ESCOLHER LADO" : (state.bans.length < 4 ? "BANIR MAPA" : "PICKAR MAPA");
   
@@ -113,7 +110,6 @@ async function refreshPB(channel, state) {
     rows.push(row);
   }
 
-  // Se já existir uma mensagem de PB, edita. Se não, envia uma nova.
   if (state.lastMsgId) {
     const msg = await channel.messages.fetch(state.lastMsgId).catch(() => null);
     if (msg) return msg.edit({ embeds: [embed], components: rows });
@@ -122,7 +118,6 @@ async function refreshPB(channel, state) {
   state.lastMsgId = sent.id;
 }
 
-// Função que verifica se o Pick/Ban acabou
 async function checkFinish(interaction, state, client) {
   if (!state.statusLado && state.bans.length === 4 && state.picks.length === 2) {
     const decisivo = state.pool[0];
@@ -136,7 +131,6 @@ async function checkFinish(interaction, state, client) {
 
     await interaction.channel.send({ content: "🏆 **Confronto definido!**", embeds: [embedFinal] });
     
-    // Anúncio no canal de Amistosos
     const amiChan = await client.channels.fetch(IDS.AMISTOSOS);
     amiChan.send({ content: `🔥 **Novo Match:** ${state.timeA} vs ${state.timeB}`, embeds: [embedFinal] });
 
@@ -146,7 +140,6 @@ async function checkFinish(interaction, state, client) {
   }
 }
 
-// Exportando as funções e o Map para o seu index.js usar
 module.exports.activePickBans = activePickBans;
 module.exports.refreshPB = refreshPB;
 module.exports.checkFinish = checkFinish;

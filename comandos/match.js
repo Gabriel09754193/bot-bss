@@ -3,75 +3,103 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  PermissionsBitField,
 } = require("discord.js");
 
-/* =========================
-   CONFIGURAÇÕES FIXAS (BSS)
-========================= */
+// Configurações de IDs
 const IDS = {
   PARTIDAS_EM_ESPERA: "1463270089376927845",
+  PICKBAN: "1464649761213780149",
+  RESULTADOS: "1463260797604987014",
+  AMISTOSOS: "1466989903232499712",
+  CATEGORIA_MATCH: "1463562210591637605",
 };
+
+const MAP_POOL = ["Mirage", "Inferno", "Nuke", "Overpass", "Ancient", "Anubis", "Dust2"];
+const activePickBans = new Map();
 
 module.exports = {
   nome: "match",
-
   async execute(message, args, client) {
-    // Agora qualquer um pode usar o comando, mas você pode restringir se quiser
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
     setTimeout(() => message.delete().catch(() => {}), 1000);
 
-    const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Disponibilidade da equipe?**"];
+    const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Qual a disponibilidade?**"];
     let respostas = [];
-    let msgsColeta = [];
+    
+    const filter = m => m.author.id === message.author.id;
+    const coletor = message.channel.createMessageCollector({ filter, max: 2, time: 60000 });
 
-    const msgBoasVindas = await message.channel.send("✨ **BSS Match System** | Iniciando formulário...");
-    msgsColeta.push(msgBoasVindas);
+    const msgPergunta = await message.channel.send(perguntas[0]);
 
-    const coletor = message.channel.createMessageCollector({ 
-        filter: (m) => m.author.id === message.author.id, 
-        max: 2, 
-        time: 60000 
-    });
-
-    const p1 = await message.channel.send(perguntas[0]);
-    msgsColeta.push(p1);
-
-    coletor.on("collect", async (m) => {
+    coletor.on('collect', async m => {
       respostas.push(m.content);
-      msgsColeta.push(m);
+      m.delete().catch(() => {});
       if (respostas.length < 2) {
-        const p2 = await message.channel.send(perguntas[1]);
-        msgsColeta.push(p2);
+        msgPergunta.edit(perguntas[1]);
       }
     });
 
-    coletor.on("end", async () => {
-      msgsColeta.forEach(m => m.delete().catch(() => {}));
+    coletor.on('end', async () => {
+      msgPergunta.delete().catch(() => {});
       if (respostas.length < 2) return;
 
-      const [nomeA, disp] = respostas;
       const canalEspera = await client.channels.fetch(IDS.PARTIDAS_EM_ESPERA);
-
-      // ESTE EMBED É A BASE DE TUDO. OS IDS DOS FIELDS SÃO USADOS NO INDEX.
       const embed = new EmbedBuilder()
         .setColor("#FF8C00")
-        .setTitle("🔥 NOVO DESAFIO DISPONÍVEL")
-        .setThumbnail("https://i.imgur.com/8E9X9ZQ.png")
+        .setTitle("⚔️ BSS | NOVO DESAFIO")
         .addFields(
-          { name: "🛡️ Equipe Solicitante", value: `**${nomeA}**`, inline: true },
-          { name: "🎮 IGL Responsável", value: `<@${message.author.id}>`, inline: true },
-          { name: "📅 Disponibilidade", value: `\`${disp}\`` }
+          { name: "🛡️ Equipe", value: respostas[0], inline: true },
+          { name: "📅 Horário", value: respostas[1], inline: true }
         )
-        .setFooter({ text: "Clique no botão abaixo para aceitar o confronto!" });
+        .setFooter({ text: `ID:${message.author.id}` });
 
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("bss_match_aceitar") // ID que o index está escutando
-          .setLabel("ACEITAR DESAFIO")
-          .setStyle(ButtonStyle.Success)
-          .setEmoji("⚔️")
+        new ButtonBuilder().setCustomId("bss_match_aceitar").setLabel("Aceitar Desafio").setStyle(ButtonStyle.Success)
       );
 
       await canalEspera.send({ embeds: [embed], components: [row] });
     });
   },
 };
+
+// --- FUNÇÃO DE ATUALIZAÇÃO DO PAINEL ---
+async function refreshPB(channel, state) {
+  const fase = state.statusLado ? "ESCOLHER LADO" : (state.bans.length < 4 ? "BANIR" : "PICKAR");
+  
+  const embed = new EmbedBuilder()
+    .setTitle("🗺️ Painel Pick/Ban BSS")
+    .setColor(state.statusLado ? "#FEE75C" : (state.bans.length < 4 ? "#ED4245" : "#57F287"))
+    .setDescription(`👤 Vez de: <@${state.turno}>\n🎯 Ação: **${fase}**`)
+    .addFields({ name: "📜 Histórico", value: state.logs.join("\n") || "Iniciando..." })
+    .setTimestamp();
+
+  const rows = [];
+  if (state.statusLado) {
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("side_CT").setLabel("Começar de CT").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("side_TR").setLabel("Começar de TR").setStyle(ButtonStyle.Primary)
+    ));
+  } else {
+    let row = new ActionRowBuilder();
+    state.pool.forEach((m, i) => {
+      if (i > 0 && i % 4 === 0) { rows.push(row); row = new ActionRowBuilder(); }
+      row.addComponents(new ButtonBuilder().setCustomId(`pb_${m}`).setLabel(m).setStyle(state.bans.length < 4 ? ButtonStyle.Danger : ButtonStyle.Success));
+    });
+    rows.push(row);
+  }
+
+  // Se já existir mensagem, edita. Senão, envia nova e salva o ID.
+  if (state.lastMsgId) {
+    const msg = await channel.messages.fetch(state.lastMsgId).catch(() => null);
+    if (msg) return msg.edit({ embeds: [embed], components: rows });
+  }
+  const sent = await channel.send({ embeds: [embed], components: rows });
+  state.lastMsgId = sent.id;
+}
+
+// Exportando tudo para o arquivo principal
+module.exports.activePickBans = activePickBans;
+module.exports.refreshPB = refreshPB;
+module.exports.IDS = IDS;
+module.exports.MAP_POOL = MAP_POOL;

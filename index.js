@@ -8,14 +8,13 @@ const client = new Client({
 });
 
 client.commands = new Collection();
+const matchLogic = require("./comandos/match.js");
+
 const commandFiles = fs.readdirSync("./comandos").filter(file => file.endsWith(".js"));
 for (const file of commandFiles) {
   const command = require(`./comandos/${file}`);
   client.commands.set(command.nome, command);
 }
-
-// Importamos a lógica centralizada do arquivo de comando
-const matchLogic = require("./comandos/match.js");
 
 client.once("ready", () => console.log(`🤖 BSS Bot Online: ${client.user.tag}`));
 
@@ -31,25 +30,24 @@ client.on("interactionCreate", async (interaction) => {
   const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
   if (interaction.isButton()) {
-    // 1. ACEITAR DESAFIO
     if (interaction.customId === "bss_match_aceitar") {
-      const iglAId = interaction.message.embeds[0].footer.text.split("ID:")[1];
-      if (interaction.user.id === iglAId) return interaction.reply({ content: "❌ Você não pode aceitar seu próprio desafio.", ephemeral: true });
+      const footerText = interaction.message.embeds[0].footer.text;
+      const iglAId = footerText.split("ID:")[1];
+      if (interaction.user.id === iglAId) return interaction.reply({ content: "❌ Você não pode aceitar seu próprio jogo.", ephemeral: true });
 
-      const modalTimeB = new ModalBuilder().setCustomId("modal_aceitar_desafio").setTitle("🛡️ Confirmar Presença");
+      const modalTimeB = new ModalBuilder().setCustomId("modal_aceitar_desafio").setTitle("🛡️ Confirmar Desafio");
       modalTimeB.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId("nome_time_b").setLabel("NOME DA SUA EQUIPE").setStyle(TextInputStyle.Short).setRequired(true)
+        new TextInputBuilder().setCustomId("nome_time_b").setLabel("QUAL O NOME DO SEU TIME?").setStyle(TextInputStyle.Short).setRequired(true)
       ));
       return await interaction.showModal(modalTimeB);
     }
 
-    // 2. CONTROLES DE ADMIN (PickBan, Resultado, Cancelar)
     if (["pb_start", "match_result", "match_cancel"].includes(interaction.customId) && !isAdmin) {
-      return interaction.reply({ content: "🚫 Apenas a **Staff BSS** pode clicar aqui.", ephemeral: true });
+        return interaction.reply({ content: "🚫 Apenas membros da Staff podem gerenciar esta partida.", ephemeral: true });
     }
 
     if (interaction.customId === "match_cancel") {
-      await interaction.reply("⚠️ Canal será deletado em 5 segundos...");
+      await interaction.reply("⚠️ Deletando canal em 5 segundos...");
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
       return;
     }
@@ -68,21 +66,19 @@ client.on("interactionCreate", async (interaction) => {
       return matchLogic.refreshPB(interaction.channel, stateData);
     }
 
-    // 3. LÓGICA DE TURNOS (PICK/BAN E LADO)
     if (interaction.customId.startsWith("pb_") || interaction.customId.startsWith("side_")) {
       if (!state || interaction.user.id !== state.turno) return interaction.reply({ content: "❌ Não é sua vez!", ephemeral: true });
 
       if (interaction.customId.startsWith("pb_")) {
         const mapa = interaction.customId.replace("pb_", "");
         state.pool = state.pool.filter(m => m !== mapa);
-
         if (state.bans.length < 4) {
           state.bans.push(mapa);
           state.logs.push(`🔴 **Veto:** <@${interaction.user.id}> removeu \`${mapa}\``);
           state.turno = state.turno === state.iglA ? state.iglB : state.iglA;
         } else {
           state.picks.push(mapa);
-          state.logs.push(`🟢 **Pick:** <@${interaction.user.id}> escolheu \`${mapa}\``);
+          state.logs.push(`🟢 **Pick:** <@${interaction.user.id}> selecionou \`${mapa}\``);
           state.ultimoPick = interaction.user.id;
           state.statusLado = true;
           state.turno = state.turno === state.iglA ? state.iglB : state.iglA;
@@ -91,7 +87,6 @@ client.on("interactionCreate", async (interaction) => {
         const lado = interaction.customId.split("_")[1];
         state.logs.push(`⚖️ **Lado:** <@${interaction.user.id}> escolheu **${lado}** em \`${state.picks[state.picks.length-1]}\``);
         state.statusLado = false;
-        // CORREÇÃO: O turno volta para quem NÃO pickou o mapa por último
         state.turno = state.ultimoPick === state.iglA ? state.iglB : state.iglA;
       }
       await interaction.deferUpdate();
@@ -99,16 +94,15 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.customId === "match_result") {
-      const modalRes = new ModalBuilder().setCustomId("modal_bss_final").setTitle("🏆 Relatório Final");
-      modalRes.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("v").setLabel("QUEM VENCEU?").setStyle(TextInputStyle.Short).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pl").setLabel("PLACAR (EX: 13-05)").setStyle(TextInputStyle.Short).setRequired(true))
+      const modal = new ModalBuilder().setCustomId("modal_bss_final").setTitle("🏆 Relatório BSS");
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("v").setLabel("VENCEDOR").setStyle(TextInputStyle.Short).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pl").setLabel("PLACAR").setStyle(TextInputStyle.Short).setRequired(true))
       );
-      return await interaction.showModal(modalRes);
+      return await interaction.showModal(modal);
     }
   }
 
-  // --- SUBMISSÃO DE MODALS ---
   if (interaction.isModalSubmit()) {
     if (interaction.customId === "modal_aceitar_desafio") {
       const nomeB = interaction.fields.getTextInputValue("nome_time_b");
@@ -126,14 +120,11 @@ client.on("interactionCreate", async (interaction) => {
         ],
       });
 
-      const embedEdit = EmbedBuilder.from(embedOriginal).setTitle("✅ PARTIDA EM ANDAMENTO").setColor("#00FF00")
-        .addFields({ name: "🛡️ Equipe B", value: `**${nomeB}**`, inline: true }).setFooter({ text: `Iniciada por ${interaction.user.username}` });
-      
-      await interaction.update({ embeds: [embedEdit], components: [] });
+      const embedEditada = EmbedBuilder.from(embedOriginal).setTitle("✅ DESAFIO ACEITO").setColor("#00FF00")
+        .addFields({ name: "🛡️ Equipe B", value: `**${nomeB}**`, inline: true })
+        .setFooter({ text: `Aceito por ${interaction.user.username} | ID:${iglAId}` });
 
-      const embedPrivado = new EmbedBuilder().setTitle("🔥 AMISTOSO BSS").setColor("#2b2d31")
-        .setDescription("Gerenciamento exclusivo da **Staff**.")
-        .addFields({ name: "Time A", value: nomeA, inline: true }, { name: "Time B", value: nomeB, inline: true });
+      await interaction.update({ embeds: [embedEditada], components: [] });
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("pb_start").setLabel("INICIAR PICK/BAN").setStyle(ButtonStyle.Primary).setEmoji("🗺️"),
@@ -141,19 +132,21 @@ client.on("interactionCreate", async (interaction) => {
         new ButtonBuilder().setCustomId("match_cancel").setLabel("CANCELAR").setStyle(ButtonStyle.Danger).setEmoji("✖️")
       );
 
+      const embedPrivado = new EmbedBuilder().setTitle("🤝 PAINEL DA PARTIDA").setColor("#2b2d31")
+        .addFields({ name: "🏠 Time A", value: nomeA, inline: true }, { name: "🚀 Time B", value: nomeB, inline: true });
+
       await channel.send({ content: `🔔 <@${iglAId}> vs <@${interaction.user.id}>`, embeds: [embedPrivado], components: [row] });
     }
 
     if (interaction.customId === "modal_bss_final") {
-      const v = interaction.fields.getTextInputValue("v");
-      const pl = interaction.fields.getTextInputValue("pl");
-      const embedFinal = new EmbedBuilder().setTitle("🏆 RESULTADO BSS").setColor("#FFD700")
-        .addFields({ name: "⭐ Vencedor", value: `**${v}**` }, { name: "📊 Placar", value: `\`${pl}\`` }).setTimestamp();
-      
-      const ch = await client.channels.fetch(matchLogic.IDS.RESULTADOS);
-      if (ch) ch.send({ embeds: [embedFinal] });
-      await interaction.reply("✅ Resultado publicado! Deletando canal...");
-      setTimeout(() => interaction.channel.delete().catch(() => {}), 10000);
+        const v = interaction.fields.getTextInputValue("v");
+        const pl = interaction.fields.getTextInputValue("pl");
+        const embedRes = new EmbedBuilder().setTitle("🏆 RESULTADO BSS").setColor("#00FF00")
+            .addFields({ name: "Vencedor", value: v }, { name: "Placar", value: `\`${pl}\`` });
+        const ch = await client.channels.fetch(matchLogic.IDS.RESULTADOS);
+        if (ch) ch.send({ embeds: [embedRes] });
+        await interaction.reply("✅ Enviado!");
+        setTimeout(() => interaction.channel.delete().catch(() => {}), 10000);
     }
   }
 });

@@ -14,9 +14,6 @@ const activePickBans = new Map();
 module.exports = {
   nome: "match",
   async execute(message, args, client) {
-    // APENAS IGLs ou ADMINS (Pode ajustar para o ID do cargo IGL aqui)
-    // if (!message.member.roles.cache.has("ID_DO_CARGO_IGL")) return;
-
     setTimeout(() => message.delete().catch(() => {}), 1000);
 
     const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Qual a disponibilidade (ex: Sábado 19h)?**"];
@@ -41,7 +38,7 @@ module.exports = {
         .setColor("#FF8C00")
         .setAuthor({ name: "BSS | SOLICITAÇÃO DE AMISTOSO", iconURL: client.user.displayAvatarURL() })
         .addFields(
-          { name: "🛡️ Equipe", value: `**${respostas[0]}**`, inline: true },
+          { name: "🛡️ Equipe", value: `${respostas[0]}`, inline: true },
           { name: "📅 Disponibilidade", value: `\`${respostas[1]}\``, inline: true }
         )
         .setFooter({ text: `ID:${message.author.id}` });
@@ -54,10 +51,10 @@ module.exports = {
     });
   },
   
-  // Exportamos as funções para o index.js usar
   activePickBans,
   IDS,
   MAP_POOL,
+
   refreshPB: async function(channel, state) {
     const fase = state.statusLado ? "ESCOLHER LADO" : (state.bans.length < 4 ? "BANIR" : "PICKAR MAPA");
     const embed = new EmbedBuilder().setTitle("🗺️ SISTEMA DE PICK/BAN BSS").setColor("#2b2d31")
@@ -91,12 +88,30 @@ module.exports = {
   checkFinish: async function(interaction, state, client) {
     if (!state.statusLado && state.bans.length === 4 && state.picks.length === 2) {
       const decisivo = state.pool[0];
-      const embedResumo = new EmbedBuilder().setTitle("⚔️ CONFRONTO DEFINIDO").setColor("#5865F2")
-        .addFields({ name: "🗺️ Mapas", value: `1. **${state.picks[0]}**\n2. **${state.picks[1]}**\n3. **${decisivo}** (Decisivo)` });
+
+      // NOVO EMBED DETALHADO E BONITO
+      const embedFinal = new EmbedBuilder()
+        .setTitle("🎮 CONFRONTO DEFINIDO | BSS PREMIER")
+        .setColor("#5865F2")
+        .setThumbnail(client.user.displayAvatarURL())
+        .setDescription(`As equipes acabaram de definir os campos de batalha para este grande duelo!`)
+        .addFields(
+          { name: "🏠 Equipe Casa", value: `**${state.timeA}**`, inline: true },
+          { name: "🚀 Equipe Visitante", value: `**${state.timeB}**`, inline: true },
+          { name: "\u200B", value: "\u200B", inline: false },
+          { name: "📍 Mapas Oficiais (Série MD3)", value: `1️⃣ **${state.picks[0]}**\n2️⃣ **${state.picks[1]}**\n3️⃣ **${decisivo}** (Decisivo)`, inline: false }
+        )
+        .setFooter({ text: "Boa sorte aos competidores! | BSS E-sports", iconURL: client.user.displayAvatarURL() })
+        .setTimestamp();
+
+      await interaction.channel.send({ content: "🔥 **O MOMENTO CHEGOU! OS MAPAS FORAM DEFINIDOS!**", embeds: [embedFinal] });
       
-      await interaction.channel.send({ embeds: [embedResumo] });
-      const c1 = await client.channels.fetch(IDS.PICKBAN); if (c1) c1.send({ embeds: [new EmbedBuilder().setTitle("📋 LOGS").setDescription(state.logs.join("\n"))] });
-      const c2 = await client.channels.fetch(IDS.AMISTOSOS); if (c2) c2.send({ embeds: [embedResumo] });
+      const c1 = await client.channels.fetch(IDS.PICKBAN); 
+      if (c1) c1.send({ embeds: [new EmbedBuilder().setTitle(`📋 LOGS: ${state.timeA} vs ${state.timeB}`).setDescription(state.logs.join("\n")).setColor("#2b2d31")] });
+      
+      const c2 = await client.channels.fetch(IDS.AMISTOSOS); 
+      if (c2) c2.send({ content: "📢 **Novo Amistoso Confirmado!**", embeds: [embedFinal] });
+
       activePickBans.delete(interaction.channel.id);
     } else {
       this.refreshPB(interaction.channel, state);

@@ -1,10 +1,16 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require("discord.js");
+const { 
+  EmbedBuilder, 
+  ActionRowBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  PermissionsBitField 
+} = require("discord.js");
 
-// Mantenha seus IDs aqui
 const IDS = {
   PARTIDAS_EM_ESPERA: "1463270089376927845",
   AMISTOSOS: "1466989903232499712",
   CATEGORIA_MATCH: "1463562210591637605",
+  RESULTADOS: "1463260797604987014"
 };
 
 const MAP_POOL = ["Mirage", "Inferno", "Nuke", "Overpass", "Ancient", "Anubis", "Dust2"];
@@ -14,56 +20,53 @@ module.exports = {
   nome: "match",
   async execute(message, args, client) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-    
-    // Deleta o comando do admin para não poluir
     setTimeout(() => message.delete().catch(() => {}), 1000);
 
     const perguntas = ["🛡️ **Qual o nome da sua equipe?**", "📅 **Qual a disponibilidade?**"];
     let respostas = [];
-    
     const filter = m => m.author.id === message.author.id;
     const coletor = message.channel.createMessageCollector({ filter, max: 2, time: 60000 });
 
-    const msgStatus = await message.channel.send(perguntas[0]);
+    const msgPergunta = await message.channel.send(perguntas[0]);
 
-    coletor.on('collect', m => {
+    coletor.on('collect', async m => {
       respostas.push(m.content);
       m.delete().catch(() => {});
-      if (respostas.length < 2) msgStatus.edit(perguntas[1]);
+      if (respostas.length < 2) msgPergunta.edit(perguntas[1]);
     });
 
     coletor.on('end', async () => {
-      msgStatus.delete().catch(() => {});
+      msgPergunta.delete().catch(() => {});
       if (respostas.length < 2) return;
 
       const canalEspera = await client.channels.fetch(IDS.PARTIDAS_EM_ESPERA);
       const embed = new EmbedBuilder()
         .setColor("#FF8C00")
-        .setTitle("🔥 BSS | Amistoso Disponível")
+        .setTitle("⚔️ BSS | NOVO DESAFIO")
         .addFields(
-          { name: "🛡️ Time", value: respostas[0], inline: true },
-          { name: "📅 Disponibilidade", value: respostas[1], inline: true }
+          { name: "🛡️ Equipe", value: respostas[0], inline: true },
+          { name: "📅 Horário", value: respostas[1], inline: true }
         )
-        .setFooter({ text: `ID:${message.author.id} | Pendente` });
+        .setFooter({ text: `ID:${message.author.id}` });
 
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("bss_match_aceitar").setLabel("Aceitar Match").setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId("bss_match_aceitar").setLabel("Aceitar Desafio").setStyle(ButtonStyle.Success)
       );
 
       await canalEspera.send({ embeds: [embed], components: [row] });
     });
-  },
+  }
 };
 
-// --- FUNÇÃO PARA ATUALIZAR O PAINEL DE PICK/BAN ---
+// --- FUNÇÃO DE ATUALIZAÇÃO DO PAINEL (ESSENCIAL) ---
 async function refreshPB(channel, state) {
   const fase = state.statusLado ? "ESCOLHER LADO" : (state.bans.length < 4 ? "BANIR" : "PICKAR");
   
   const embed = new EmbedBuilder()
     .setTitle("🗺️ Painel Pick/Ban BSS")
-    .setColor(state.statusLado ? "#FEE75C" : "#57F287")
+    .setColor(state.statusLado ? "#FEE75C" : (state.bans.length < 4 ? "#ED4245" : "#57F287"))
     .setDescription(`👤 Vez de: <@${state.turno}>\n🎯 Ação: **${fase}**`)
-    .addFields({ name: "📜 Histórico", value: state.logs.join("\n") || "Aguardando..." });
+    .addFields({ name: "📜 Histórico", value: state.logs.join("\n") || "Iniciando..." });
 
   const rows = [];
   if (state.statusLado) {
@@ -80,7 +83,6 @@ async function refreshPB(channel, state) {
     rows.push(row);
   }
 
-  // Edita a mensagem se ela existir, se não, envia nova
   if (state.lastMsgId) {
     const msg = await channel.messages.fetch(state.lastMsgId).catch(() => null);
     if (msg) return msg.edit({ embeds: [embed], components: rows });
@@ -89,7 +91,7 @@ async function refreshPB(channel, state) {
   state.lastMsgId = sent.id;
 }
 
-// Exportando para o index.js
+// Exportações para o index.js usar
 module.exports.activePickBans = activePickBans;
 module.exports.refreshPB = refreshPB;
 module.exports.IDS = IDS;

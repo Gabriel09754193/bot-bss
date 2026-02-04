@@ -151,4 +151,9 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-client.login(process.env.TOKEN);
+const token = process.env.TOKEN;
+if (!token) {
+  console.error("❌ ERRO: A variável TOKEN não foi encontrada no ambiente!");
+  process.exit(1);
+}
+client.login(token);

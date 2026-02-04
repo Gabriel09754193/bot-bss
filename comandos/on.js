@@ -23,4 +23,4 @@ module.exports = {
 
     await message.channel.send({ content: "@everyone", embeds: [embed] });
   },
-};
+  

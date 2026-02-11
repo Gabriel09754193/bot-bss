@@ -1,48 +1,64 @@
-const { EmbedBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require("discord.js");
+const { EmbedBuilder, PermissionsBitField } = require("discord.js");
 
 module.exports = {
   nome: "denunciar",
   execute: async (message, args, client) => {
-    // Apaga a mensagem para manter o sigilo
+    const canalStaffId = "1471161577087438910";
+    const logoBSS = "https://cdn.discordapp.com/icons/1463256488205090920/36cc89f00f2baf2004186f6cd15e68c2.png?size=2048";
+
+    // Apaga o comando imediatamente para manter o anonimato
     await message.delete().catch(() => {});
 
-    // Cria o Formulário (Modal)
-    const modal = new ModalBuilder()
-      .setCustomId('modal_denuncia')
-      .setTitle('🛡️ Formulário de Denúncia BSS');
+    // Envia uma mensagem temporária avisando que começou
+    const aviso = await message.channel.send(`🛡️ **${message.author}**, verifique suas mensagens ou responda aqui rapidamente. (Sua mensagem será apagada)`);
+    
+    const filter = m => m.author.id === message.author.id;
+    const collector = message.channel.createMessageCollector({ filter, max: 3, time: 60000 });
 
-    const campoAlvo = new TextInputBuilder()
-      .setCustomId('denuncia_alvo')
-      .setLabel("Qual o nome do Jogador ou Time?")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
+    let passo = 0;
+    let dados = { alvo: "", motivo: "", provas: "" };
 
-    const campoMotivo = new TextInputBuilder()
-      .setCustomId('denuncia_motivo')
-      .setLabel("O que aconteceu?")
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true);
+    message.channel.send("1️⃣ **Qual o nome do Jogador ou Time?**").then(m => setTimeout(() => m.delete(), 15000));
 
-    const campoProvas = new TextInputBuilder()
-      .setCustomId('denuncia_provas')
-      .setLabel("Cole links de vídeos ou prints aqui:")
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true);
+    collector.on('collect', async m => {
+      await m.delete().catch(() => {}); // Apaga a resposta do usuário na hora!
+      
+      passo++;
+      if (passo === 1) {
+        dados.alvo = m.content;
+        message.channel.send("2️⃣ **Qual o motivo da denúncia?**").then(msg => setTimeout(() => msg.delete(), 15000));
+      } else if (passo === 2) {
+        dados.motivo = m.content;
+        message.channel.send("3️⃣ **Envie os links das provas (prints/vídeos):**").then(msg => setTimeout(() => msg.delete(), 15000));
+      } else if (passo === 3) {
+        dados.provas = m.content;
+        
+        // Envia para a Staff
+        const embedStaff = new EmbedBuilder()
+          .setAuthor({ name: "🚨 NOVA DENÚNCIA BSS", iconURL: logoBSS })
+          .setColor("#FF0000")
+          .setThumbnail(logoBSS)
+          .addFields(
+            { name: "👤 Alvo", value: `\`${dados.alvo}\``, inline: true },
+            { name: "🆔 Protocolo", value: `#${Math.floor(Math.random() * 9000)}`, inline: true },
+            { name: "📝 Motivo", value: dados.motivo },
+            { name: "🔗 Provas", value: dados.provas }
+          )
+          .setFooter({ text: "Denunciante Protegido pelo Sistema BSS" })
+          .setTimestamp();
 
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(campoAlvo),
-      new ActionRowBuilder().addComponents(campoMotivo),
-      new ActionRowBuilder().addComponents(campoProvas)
-    );
+        const canalStaff = client.channels.cache.get(canalStaffId);
+        if (canalStaff) await canalStaff.send({ embeds: [embedStaff] });
 
-    // Mostra o formulário para o usuário
-    await message.channel.send({ 
-      content: `🔒 **${message.author.username}**, clique no botão abaixo para preencher sua denúncia de forma segura.`,
-      components: [
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('btn_abrir').setLabel('Abrir Formulário').setStyle(TextInputStyle.Short) // Nota: Modais precisam ser acionados por interações de botão ou comandos slash.
-        )
-      ]
-    }).then(msg => setTimeout(() => msg.delete(), 10000)); // Apaga o aviso após 10 segundos
+        message.channel.send("✅ **Denúncia enviada com sucesso e apagada do chat!**").then(msg => setTimeout(() => msg.delete(), 5000));
+        aviso.delete().catch(() => {});
+      }
+    });
+
+    collector.on('end', collected => {
+      if (collected.size < 3) {
+        message.channel.send("⚠️ Tempo esgotado. Tente o comando novamente.").then(m => setTimeout(() => m.delete(), 5000));
+      }
+    });
   }
 };

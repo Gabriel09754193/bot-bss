@@ -3,74 +3,78 @@ const { EmbedBuilder, PermissionsBitField } = require("discord.js");
 module.exports = {
   nome: "equipe",
   execute: async (message, args, client) => {
-    // 1. Verificação de Admin
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
-    // 2. IDs de Canais e Tags
     const logoBSS = "https://cdn.discordapp.com/icons/1463256488205090920/36cc89f00f2baf2004186f6cd15e68c2.png?size=2048";
-    const canais = {
-      liberada: "1471171334380982495",
-      afastada: "1471170999109157016",
-      banida: "1471171178868506777"
-    };
-    const tags = {
-      liberada: "1471161180524380293",
-      afastada: "1471160904598163466",
-      banida: "1471169188650553679"
-    };
+    
+    // IDs dos Canais de Anúncio Específicos
+    const canalLiberada = "1471171334380982495";
+    const canalAfastada = "1471170999109157016";
+    const canalBanida = "1471171178868506777";
+    
+    // IDs das Tags de Status
+    const tagElegivelId = "1471161180524380293"; 
+    const tagAfastadoId = "1471160904598163466"; 
+    const tagBanidoId = "1471169188650553679";   
 
-    // 3. Captura de Argumentos
     const alvoRole = message.mentions.roles.first();
-    const acao = args[1]?.toLowerCase();
-    const motivo = args.slice(2).join(" ") || "Critério da diretoria técnica BSS.";
+    const acao = args[1]?.toLowerCase(); 
+    const motivo = args.slice(2).join(" ") || "Decisão da Diretoria BSS.";
 
-    // 4. Validação Inicial
     if (!alvoRole || !['liberada', 'afastada', 'banida'].includes(acao)) {
       return message.reply("⚠️ **Uso:** `.equipe @CargoDoTime [liberada/afastada/banida] [motivo]`");
     }
 
-    try {
-      // 5. Busca membros (Essencial para não dar erro de cache)
-      await message.guild.members.fetch();
-      const membrosComCargo = alvoRole.members;
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: "🛡️ BSS LIGA OFICIAL | GESTÃO TÉCNICA", iconURL: logoBSS })
+      .setThumbnail(logoBSS)
+      .setTimestamp()
+      .setFooter({ text: "Sincronização de Tags em Massa" });
 
-      if (membrosComCargo.size === 0) {
-        return message.reply(`⚠️ O cargo **${alvoRole.name}** não tem membros.`);
-      }
+    const membrosTime = alvoRole.members;
+    let canalAlvoId = "";
 
-      // 6. Feedback visual no chat de comando
-      const statusMsg = await message.reply(`⏳ Sincronizando **${membrosComCargo.size}** membros...`);
+    // --- LÓGICA: EQUIPE LIBERADA ---
+    if (acao === "liberada") {
+      canalAlvoId = canalLiberada;
+      embed.setColor("#2ECC71").setTitle("✅ EQUIPE LIBERADA")
+           .setDescription(`A organização **${alvoRole.name}** foi validada. Todos os membros receberam o selo de **Elegível**.`);
 
-      // 7. Processamento das Tags
-      const tagAdicionar = tags[acao];
-      const tagsRemover = Object.values(tags).filter(t => t !== tagAdicionar);
+      membrosTime.forEach(membro => {
+        membro.roles.add(tagElegivelId).catch(() => {});
+        membro.roles.remove([tagAfastadoId, tagBanidoId]).catch(() => {});
+      });
+    } 
 
-      for (const [id, membro] of membrosComCargo) {
-        await membro.roles.add(tagAdicionar).catch(() => {});
-        await membro.roles.remove(tagsRemover).catch(() => {});
-      }
+    // --- LÓGICA: EQUIPE AFASTADA ---
+    else if (acao === "afastada") {
+      canalAlvoId = canalAfastada;
+      embed.setColor("#E67E22").setTitle("⚠️ EQUIPE AFASTADA")
+           .setDescription(`A organização **${alvoRole.name}** está sob suspensão. Todos os membros foram marcados como **Afastados**.`);
 
-      // 8. Envio do Embed para o canal correto
-      const cores = { liberada: "#2ECC71", afastada: "#E67E22", banida: "#FF0000" };
-      const titulos = { liberada: "✅ EQUIPE LIBERADA", afastada: "⚠️ EQUIPE AFASTADA", banida: "🚫 EQUIPE BANIDA" };
-
-      const embed = new EmbedBuilder()
-        .setAuthor({ name: "🛡️ BSS LIGA OFICIAL", iconURL: logoBSS })
-        .setTitle(titulos[acao])
-        .setColor(cores[acao])
-        .setThumbnail(logoBSS)
-        .setDescription(`A organização **${alvoRole.name}** teve seu status atualizado.\n\n**Justificativa:**\n\`\`\`text\n${motivo}\n\`\`\``)
-        .setFooter({ text: `Total de ${membrosComCargo.size} membros sincronizados.` })
-        .setTimestamp();
-
-      const canalDestino = client.channels.cache.get(canais[acao]);
-      if (canalDestino) await canalDestino.send({ embeds: [embed] });
-
-      await statusMsg.edit(`✅ **Sucesso!** Equipe **${alvoRole.name}** marcada como **${acao}**.`);
-
-    } catch (error) {
-      console.error(error);
-      message.reply("❌ Erro ao processar. Verifique se o bot tem permissão de 'Gerenciar Cargos'.");
+      membrosTime.forEach(membro => {
+        membro.roles.add(tagAfastadoId).catch(() => {});
+        membro.roles.remove([tagElegivelId, tagBanidoId]).catch(() => {});
+      });
     }
+
+    // --- LÓGICA: EQUIPE BANIDA ---
+    else if (acao === "banida") {
+      canalAlvoId = canalBanida;
+      embed.setColor("#FF0000").setTitle("🚫 EQUIPE BANIDA")
+           .setDescription(`A organização **${alvoRole.name}** foi expulsa. Todos os membros vinculados receberam a tag de **Banido**.`);
+
+      membrosTime.forEach(membro => {
+        membro.roles.add(tagBanidoId).catch(() => {});
+        membro.roles.remove([tagElegivelId, tagAfastadoId]).catch(() => {});
+      });
+    }
+
+    embed.addFields({ name: "📄 Justificativa", value: `\`\`\`text\n${motivo}\n\`\`\`` });
+
+    const canalDestino = client.channels.cache.get(canalAlvoId);
+    if (canalDestino) await canalDestino.send({ embeds: [embed] });
+    
+    message.reply(`✅ Sucesso! O anúncio foi enviado para o canal de equipes **${acao}s**.`);
   }
 };

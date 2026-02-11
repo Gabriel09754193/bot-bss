@@ -7,12 +7,10 @@ module.exports = {
 
     const logoBSS = "https://cdn.discordapp.com/icons/1463256488205090920/36cc89f00f2baf2004186f6cd15e68c2.png?size=2048";
     
-    // IDs dos Canais de Anúncio Específicos
+    // IDs dos Canais e Tags
     const canalLiberada = "1471171334380982495";
     const canalAfastada = "1471170999109157016";
     const canalBanida = "1471171178868506777";
-    
-    // IDs das Tags de Status
     const tagElegivelId = "1471161180524380293"; 
     const tagAfastadoId = "1471160904598163466"; 
     const tagBanidoId = "1471169188650553679";   
@@ -25,56 +23,55 @@ module.exports = {
       return message.reply("⚠️ **Uso:** `.equipe @CargoDoTime [liberada/afastada/banida] [motivo]`");
     }
 
+    // --- CORREÇÃO AQUI: BUSCANDO MEMBROS DO CARGO ---
+    // Força o Discord a mandar a lista completa de quem tem o cargo
+    await message.guild.members.fetch(); 
+    const membrosComCargo = alvoRole.members;
+
+    if (membrosComCargo.size === 0) {
+        return message.reply(`⚠️ Não encontrei nenhum membro com o cargo **${alvoRole.name}**.`);
+    }
+
     const embed = new EmbedBuilder()
-      .setAuthor({ name: "🛡️ BSS LIGA OFICIAL | GESTÃO TÉCNICA", iconURL: logoBSS })
+      .setAuthor({ name: "🛡️ BSS LIGA OFICIAL", iconURL: logoBSS })
       .setThumbnail(logoBSS)
       .setTimestamp()
-      .setFooter({ text: "Sincronização de Tags em Massa" });
+      .setFooter({ text: `Processando ${membrosComCargo.size} membros.` });
 
-    const membrosTime = alvoRole.members;
     let canalAlvoId = "";
 
-    // --- LÓGICA: EQUIPE LIBERADA ---
-    if (acao === "liberada") {
-      canalAlvoId = canalLiberada;
-      embed.setColor("#2ECC71").setTitle("✅ EQUIPE LIBERADA")
-           .setDescription(`A organização **${alvoRole.name}** foi validada. Todos os membros receberam o selo de **Elegível**.`);
+    // Lógica de Tags (Loop corrigido)
+    membrosComCargo.forEach(async (membro) => {
+      try {
+        if (acao === "liberada") {
+          await membro.roles.add(tagElegivelId);
+          await membro.roles.remove([tagAfastadoId, tagBanidoId]);
+          canalAlvoId = canalLiberada;
+        } else if (acao === "afastada") {
+          await membro.roles.add(tagAfastadoId);
+          await membro.roles.remove([tagElegivelId, tagBanidoId]);
+          canalAlvoId = canalAfastada;
+        } else if (acao === "banida") {
+          await membro.roles.add(tagBanidoId);
+          await membro.roles.remove([tagElegivelId, tagAfastadoId]);
+          canalAlvoId = canalBanida;
+        }
+      } catch (e) {
+        console.error(`Erro ao atualizar membro ${membro.user.tag}`);
+      }
+    });
 
-      membrosTime.forEach(membro => {
-        membro.roles.add(tagElegivelId).catch(() => {});
-        membro.roles.remove([tagAfastadoId, tagBanidoId]).catch(() => {});
-      });
-    } 
+    embed.setTitle(`📢 EQUIPE ${acao.toUpperCase()}`)
+         .setDescription(`A organização **${alvoRole.name}** foi processada com sucesso.`)
+         .addFields({ name: "📄 Justificativa", value: `\`\`\`text\n${motivo}\n\`\`\`` });
 
-    // --- LÓGICA: EQUIPE AFASTADA ---
-    else if (acao === "afastada") {
-      canalAlvoId = canalAfastada;
-      embed.setColor("#E67E22").setTitle("⚠️ EQUIPE AFASTADA")
-           .setDescription(`A organização **${alvoRole.name}** está sob suspensão. Todos os membros foram marcados como **Afastados**.`);
-
-      membrosTime.forEach(membro => {
-        membro.roles.add(tagAfastadoId).catch(() => {});
-        membro.roles.remove([tagElegivelId, tagBanidoId]).catch(() => {});
-      });
-    }
-
-    // --- LÓGICA: EQUIPE BANIDA ---
-    else if (acao === "banida") {
-      canalAlvoId = canalBanida;
-      embed.setColor("#FF0000").setTitle("🚫 EQUIPE BANIDA")
-           .setDescription(`A organização **${alvoRole.name}** foi expulsa. Todos os membros vinculados receberam a tag de **Banido**.`);
-
-      membrosTime.forEach(membro => {
-        membro.roles.add(tagBanidoId).catch(() => {});
-        membro.roles.remove([tagElegivelId, tagAfastadoId]).catch(() => {});
-      });
-    }
-
-    embed.addFields({ name: "📄 Justificativa", value: `\`\`\`text\n${motivo}\n\`\`\`` });
+    if (acao === "liberada") embed.setColor("#2ECC71");
+    else if (acao === "afastada") embed.setColor("#E67E22");
+    else if (acao === "banida") embed.setColor("#FF0000");
 
     const canalDestino = client.channels.cache.get(canalAlvoId);
     if (canalDestino) await canalDestino.send({ embeds: [embed] });
     
-    message.reply(`✅ Sucesso! O anúncio foi enviado para o canal de equipes **${acao}s**.`);
+    message.reply(`✅ Sincronização concluída! **${membrosComCargo.size}** jogadores atualizados.`);
   }
 };

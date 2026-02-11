@@ -3,20 +3,23 @@ const { EmbedBuilder, PermissionsBitField } = require("discord.js");
 module.exports = {
   nome: "equipe",
   execute: async (message, args, client) => {
-    // Verificação de permissão administrativa
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
     const logoBSS = "https://cdn.discordapp.com/icons/1463256488205090920/36cc89f00f2baf2004186f6cd15e68c2.png?size=2048";
-    const canalAnunciosId = "1471160378535710731"; // Canal de anúncios
+    
+    // IDs dos Canais de Anúncio Específicos
+    const canalLiberada = "1471171334380982495";
+    const canalAfastada = "1471170999109157016";
+    const canalBanida = "1471171178868506777";
     
     // IDs das Tags de Status
-    const tagElegivelId = "1471161180524380293"; // Tag para Liberados
-    const tagAfastadoId = "1471160904598163466"; // Tag para Afastados (Em Análise)
-    const tagBanidoId = "1471169188650553679";   // Tag para Banidos
+    const tagElegivelId = "1471161180524380293"; 
+    const tagAfastadoId = "1471160904598163466"; 
+    const tagBanidoId = "1471169188650553679";   
 
     const alvoRole = message.mentions.roles.first();
     const acao = args[1]?.toLowerCase(); 
-    const motivo = args.slice(2).join(" ") || "Critério da diretoria técnica BSS.";
+    const motivo = args.slice(2).join(" ") || "Decisão da Diretoria BSS.";
 
     if (!alvoRole || !['liberada', 'afastada', 'banida'].includes(acao)) {
       return message.reply("⚠️ **Uso:** `.equipe @CargoDoTime [liberada/afastada/banida] [motivo]`");
@@ -26,14 +29,16 @@ module.exports = {
       .setAuthor({ name: "🛡️ BSS LIGA OFICIAL | GESTÃO TÉCNICA", iconURL: logoBSS })
       .setThumbnail(logoBSS)
       .setTimestamp()
-      .setFooter({ text: "Processamento de Tags em Massa • BSS" });
+      .setFooter({ text: "Sincronização de Tags em Massa" });
 
     const membrosTime = alvoRole.members;
+    let canalAlvoId = "";
 
     // --- LÓGICA: EQUIPE LIBERADA ---
     if (acao === "liberada") {
+      canalAlvoId = canalLiberada;
       embed.setColor("#2ECC71").setTitle("✅ EQUIPE LIBERADA")
-           .setDescription(`A organização **${alvoRole.name}** foi validada. Todos os membros receberam o selo de Elegível.`);
+           .setDescription(`A organização **${alvoRole.name}** foi validada. Todos os membros receberam o selo de **Elegível**.`);
 
       membrosTime.forEach(membro => {
         membro.roles.add(tagElegivelId).catch(() => {});
@@ -43,8 +48,9 @@ module.exports = {
 
     // --- LÓGICA: EQUIPE AFASTADA ---
     else if (acao === "afastada") {
+      canalAlvoId = canalAfastada;
       embed.setColor("#E67E22").setTitle("⚠️ EQUIPE AFASTADA")
-           .setDescription(`A organização **${alvoRole.name}** está sob suspensão. Todos os membros foram marcados para análise.`);
+           .setDescription(`A organização **${alvoRole.name}** está sob suspensão. Todos os membros foram marcados como **Afastados**.`);
 
       membrosTime.forEach(membro => {
         membro.roles.add(tagAfastadoId).catch(() => {});
@@ -54,8 +60,9 @@ module.exports = {
 
     // --- LÓGICA: EQUIPE BANIDA ---
     else if (acao === "banida") {
+      canalAlvoId = canalBanida;
       embed.setColor("#FF0000").setTitle("🚫 EQUIPE BANIDA")
-           .setDescription(`A organização **${alvoRole.name}** foi banida. Todos os membros vinculados receberam a tag de restrição.`);
+           .setDescription(`A organização **${alvoRole.name}** foi expulsa. Todos os membros vinculados receberam a tag de **Banido**.`);
 
       membrosTime.forEach(membro => {
         membro.roles.add(tagBanidoId).catch(() => {});
@@ -65,9 +72,9 @@ module.exports = {
 
     embed.addFields({ name: "📄 Justificativa", value: `\`\`\`text\n${motivo}\n\`\`\`` });
 
-    const canal = client.channels.cache.get(canalAnunciosId);
-    if (canal) await canal.send({ embeds: [embed] });
+    const canalDestino = client.channels.cache.get(canalAlvoId);
+    if (canalDestino) await canalDestino.send({ embeds: [embed] });
     
-    message.reply(`✅ Sincronização de cargos concluída para **${membrosTime.size}** membros do time **${alvoRole.name}**.`);
+    message.reply(`✅ Sucesso! O anúncio foi enviado para o canal de equipes **${acao}s**.`);
   }
 };

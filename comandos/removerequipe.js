@@ -53,7 +53,7 @@ module.exports = {
           },
           { 
             name: "⚖️ PENALIDADES APLICADAS", 
-            value: "• Exclusão imediata da tabela oficial.\n• Perda de pontos e premiações.\n• Revogação de elegibilidade de todos os membros vinculados.",
+            value: "• Exclusão imediata da tabela oficial da liga.\n• Não poderão jogar a liga oficial.\n• Revogação de elegibilidade de todos os membros vinculados.",
             inline: false 
           }
         )

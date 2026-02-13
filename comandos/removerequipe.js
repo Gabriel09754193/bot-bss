@@ -10,24 +10,25 @@ module.exports = {
     const logoBSS = "https://cdn.discordapp.com/icons/1463256488205090920/36cc89f00f2baf2004186f6cd15e68c2.png?size=2048";
 
     const alvoRole = message.mentions.roles.first();
-    const motivo = args.slice(1).join(" ") || "Excesso de requisitos técnicos.";
+    const motivo = args.slice(1).join(" ") || "Excesso de requisitos técnicos (Premier 13k/GC 10/Faceit 4).";
 
     if (!alvoRole) {
       return message.reply("⚠️ **Uso:** `.removerequipe @CargoDoTime [motivo]`").catch(() => {});
     }
 
     try {
-      // 1. Busca membros sem forçar o timeout longo
+      // FORÇA A ATUALIZAÇÃO DOS MEMBROS DO CARGO (Resolve o erro de "cargo vazio")
+      await message.guild.members.fetch(); 
       const membrosComCargo = alvoRole.members;
 
       if (membrosComCargo.size === 0) {
-        return message.reply(`⚠️ O cargo **${alvoRole.name}** está vazio.`).catch(() => {});
+        return message.reply(`⚠️ O bot ainda vê o cargo **${alvoRole.name}** como vazio. Tente adicionar o cargo a alguém e aguarde 5 segundos.`).catch(() => {});
       }
 
-      // 2. Verificação de Hierarquia (Segurança para o bot não crashar)
+      // Verificação de Hierarquia
       const botMember = message.guild.members.me;
       if (botMember.roles.highest.position <= alvoRole.position) {
-        return message.reply("❌ **Erro:** O cargo do bot precisa estar ACIMA do cargo do time!").catch(() => {});
+        return message.reply("❌ **Erro de Hierarquia:** O meu cargo (BSS BOT) precisa estar acima do cargo do time na lista de cargos!").catch(() => {});
       }
 
       const embed = new EmbedBuilder()
@@ -43,28 +44,25 @@ module.exports = {
         .setFooter({ text: `Processado por: ${message.author.tag} | ${membrosComCargo.size} jogadores.` })
         .setTimestamp();
 
-      // 3. Remove a tag de Elegível (Processamento em massa)
-      const promessas = membrosComCargo.map(membro => 
-        membro.roles.remove(tagElegivelId).catch(err => console.log(`Erro em ${membro.user.tag}`))
-      );
-      await Promise.all(promessas);
-
-      // 4. Envio para o canal de logs da Staff
-      const canal = client.channels.cache.get(canalDestinoId);
-      if (canal) {
-        await canal.send({ content: `⚠️ **NOTIFICAÇÃO TÉCNICA:** ${alvoRole}`, embeds: [embed] });
+      // Remove a tag de Elegível de todos os membros encontrados
+      for (const [id, membro] of membrosComCargo) {
+        await membro.roles.remove(tagElegivelId).catch(() => {});
       }
 
-      // 5. Confirmação final segura (evita o erro de Unknown Message)
-      message.channel.send(`✅ Processo concluído: **${alvoRole.name}** removida da liga.`).catch(() => {});
+      const canal = client.channels.cache.get(canalDestinoId);
+      if (canal) {
+        await canal.send({ content: `⚠️ **EQUIPE REMOVIDA:** ${alvoRole}`, embeds: [embed] });
+      }
+
+      message.channel.send(`✅ A equipe **${alvoRole.name}** foi processada e removida.`);
       
-      // Deleta a mensagem de comando apenas se ela ainda existir
       setTimeout(() => {
         message.delete().catch(() => {});
       }, 1000);
 
     } catch (error) {
-      console.error("Erro no comando removerequipe:", error);
+      console.error(error);
+      message.reply("❌ Erro ao sincronizar membros. Tente novamente em instantes.");
     }
   }
 };
